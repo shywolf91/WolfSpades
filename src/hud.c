@@ -48,6 +48,7 @@
 #include "weapon.h"
 #include "tracer.h"
 #include "font.h"
+#include "gfx.h"
 #include "gmi.h"
 
 struct hud* hud_active;
@@ -166,7 +167,7 @@ static int playertable_sort(const void* a, const void* b) {
 }
 
 static void hud_ingame_render3D() {
-	glDepthRange(0.0F, 0.05F);
+	gfx_depth_range_weapon();
 
 	matrix_identity(matrix_projection);
 	matrix_perspective(matrix_projection, CAMERA_DEFAULT_FOV,
@@ -350,10 +351,9 @@ static void hud_ingame_render3D() {
 							 -(rotating_model->zsiz * 0.5F + rotating_model->zpiv) * rotating_model->scale, -10.0F);
 			matrix_rotate(matrix_model, window_time() * 90.0F, 0.0F, 1.0F, 0.0F);
 			matrix_upload();
-			glViewport(-settings.window_width * 0.4F, settings.window_height * 0.2F, settings.window_width,
-					   settings.window_height);
+			gfx_viewport((int)(-settings.window_width * 0.4F), (int)(settings.window_height * 0.2F), settings.window_width, settings.window_height);
 			kv6_render(rotating_model, rotating_model_team);
-			glViewport(0.0F, 0.0F, settings.window_width, settings.window_height);
+			gfx_viewport(0, 0, settings.window_width, settings.window_height);
 		}
 	}
 }
@@ -484,12 +484,12 @@ static inline void hud_common_render(mu_Context* ctx) {
 	// Ingame menu
 	if(network_connected && !network_map_transfer) {
 		mu_Color color = mu_accent_color(0.15F, 1.F);
-		glColor3ub(color.r, color.g, color.b);
+		gfx_color3ub(color.r, color.g, color.b);
 		texture_draw_empty(0, settings.window_height, settings.window_width, settings.window_height);
 		return;
 	}
 
-	glColor3f(0.5F, 0.5F, 0.5F);
+	gfx_color3f(0.5F, 0.5F, 0.5F);
 	if(settings.bg_tile) {
 		float t = window_time() * settings.bg_tile_speed;
 		texture_draw_sector(
@@ -581,16 +581,13 @@ static void hud_render_message(unsigned int channel, unsigned int k) {
 	}
 
 	if(channel == 0 && *chat[channel][k + 1] != '\0') {
-		glColor3ub(red(chat_color[channel][k + 1]), green(chat_color[channel][k + 1]), blue(chat_color[channel][k + 1]));
-		glLineWidth(3);
-		glBegin(GL_LINES);
-
-		glVertex2f(x - 11.F, y + settings.chat_spacing / 2.F + 1.F);
-		glVertex2f(x - 11.F, floor(y - 16.F - settings.chat_spacing / 2 + 1.F));
-
-		glEnd();
-		glLineWidth(1);
-		glColor3ub(255, 255, 255);
+		gfx_color3ub(red(chat_color[channel][k + 1]), green(chat_color[channel][k + 1]), blue(chat_color[channel][k + 1]));
+		gfx_line_width(3);
+		float line_xy[4] = {x - 11.F, y + settings.chat_spacing / 2.F + 1.F, x - 11.F,
+							floor(y - 16.F - settings.chat_spacing / 2 + 1.F)};
+		gfx_draw_lines_2f(line_xy, 2);
+		gfx_line_width(1);
+		gfx_color3ub(255, 255, 255);
 	}
 
 
@@ -614,13 +611,13 @@ static void hud_render_message(unsigned int channel, unsigned int k) {
 		}
 
 		switch(*c) {
-			case '\1': glColor3ub(LIGHTEN(gamestate.team_1.red), LIGHTEN(gamestate.team_1.green), LIGHTEN(gamestate.team_1.blue)); break; // Team1 color
-			case '\2': glColor3ub(LIGHTEN(gamestate.team_2.red), LIGHTEN(gamestate.team_2.green), LIGHTEN(gamestate.team_2.blue)); break; // Team2 color
-			case '\3': glColor3ub(255, 255, 255); break; // Team3 (spec) color
-			case '\4': glColor3ub(255, 0, 0); break; // Red
-			case '\5': glColor3ub(0, 255, 0); break; // Green
-			case '\6': glColor3ub(255, 255, 255); break; // Reset (white)
-			case '\7': glColor3ub(120, 120, 120); break; // Gray
+			case '\1': gfx_color3ub(LIGHTEN(gamestate.team_1.red), LIGHTEN(gamestate.team_1.green), LIGHTEN(gamestate.team_1.blue)); break; // Team1 color
+			case '\2': gfx_color3ub(LIGHTEN(gamestate.team_2.red), LIGHTEN(gamestate.team_2.green), LIGHTEN(gamestate.team_2.blue)); break; // Team2 color
+			case '\3': gfx_color3ub(255, 255, 255); break; // Team3 (spec) color
+			case '\4': gfx_color3ub(255, 0, 0); break; // Red
+			case '\5': gfx_color3ub(0, 255, 0); break; // Green
+			case '\6': gfx_color3ub(255, 255, 255); break; // Reset (white)
+			case '\7': gfx_color3ub(120, 120, 120); break; // Gray
 		}
 
 		x += len;
@@ -635,23 +632,23 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 		&& (screen_current == SCREEN_NONE || camera_mode != CAMERAMODE_FPS);
 
 	if(cameracontroller_yclamp) {
-		glColor3f(1.0F, 1.0F, 1.0F);
+		gfx_color3f(1.0F, 1.0F, 1.0F);
 		hud_font_render(8.F, settings.window_height / 2 - 4.F, 16.0F, "Y-Clamp enabled", .5f);
 	}
 
 	if(window_key_down(WINDOW_KEY_NETWORKSTATS)) {
 		if(network_map_transfer)
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 		else
-			glColor3f(0.0F, 0.0F, 0.0F);
-		glEnable(GL_DEPTH_TEST);
-		glColorMask(0, 0, 0, 0);
+			gfx_color3f(0.0F, 0.0F, 0.0F);
+		gfx_depth_test(1);
+		gfx_color_mask(0, 0, 0, 0);
 		texture_draw_empty(8.0F * scalex, 380.0F * scalef, 160.0F * scalef, 160.0F * scalef);
-		glColorMask(1, 1, 1, 1);
-		glDepthFunc(GL_NOTEQUAL);
+		gfx_color_mask(1, 1, 1, 1);
+		gfx_depth_func_notequal();
 		texture_draw_empty(7.0F * scalex, 381.0F * scalef, 162.0F * scalef, 162.0F * scalef);
-		glDepthFunc(GL_LEQUAL);
-		glDisable(GL_DEPTH_TEST);
+		gfx_depth_func_lequal();
+		gfx_depth_test(0);
 		font_select(FONT_FIXEDSYS);
 		char dbg_str[32];
 
@@ -664,7 +661,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			float out_h = (float)(network_stats[39 - k].ingoing + network_stats[39 - k].outgoing) / max * 160.0F;
 			float ping_h = min(network_stats[39 - k].avg_ping / 25.0F, 160.0F);
 
-			glColor3f(0.0F, 0.0F, 1.0F);
+			gfx_color3f(0.0F, 0.0F, 1.0F);
 			texture_draw_empty(8.0F * scalex + 4 * k * scalef, (220.0F + out_h) * scalef, 4.0F * scalef,
 							   out_h * scalef);
 			if(!k) {
@@ -672,14 +669,14 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 				font_render(8.0F * scalex + 80 * scalef, 212.0F * scalef, 16.0F, dbg_str);
 			}
 
-			glColor3f(0.0F, 1.0F, 0.0F);
+			gfx_color3f(0.0F, 1.0F, 0.0F);
 			texture_draw_empty(8.0F * scalex + 4 * k * scalef, (220.0F + in_h) * scalef, 4.0F * scalef, in_h * scalef);
 			if(!k) {
 				sprintf(dbg_str, "in: %i b/s", network_stats[1].ingoing);
 				font_render(8.0F * scalex, 212.0F * scalef, 16.F, dbg_str);
 			}
 
-			glColor3f(1.0F, 0.0F, 0.0F);
+			gfx_color3f(1.0F, 0.0F, 0.0F);
 			texture_draw_empty(8.0F * scalex + 4 * k * scalef, (220.0F + ping_h) * scalef, 4.0F * scalef,
 							   ping_h * scalef);
 			if(!k) {
@@ -688,12 +685,12 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			}
 		}
 		font_select(FONT_FIXEDSYS);
-		glColor3f(1.0F, 1.0F, 1.0F);
+		gfx_color3f(1.0F, 1.0F, 1.0F);
 	}
 
 	if(network_map_transfer) {
 		hud_common_render(ctx);
-		glColor3ub(255, 255, 255);
+		gfx_color3ub(255, 255, 255);
 
 		texture_draw(&texture_splash_icon,
 			settings.window_width - texture_splash_icon.width - 16.F,
@@ -705,10 +702,10 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 		float p = (compressed_chunk_data_estimate > 0) ?
 			((float)compressed_chunk_data_offset / (float)compressed_chunk_data_estimate) :
 			0.0F;
-		glColor3ub(68, 68, 68);
+		gfx_color3ub(68, 68, 68);
 		texture_draw(&texture_loader, 0, texture_loader.height, settings.window_width, texture_loader.height);
 
-		glColor3ub(255, 255, 255);
+		gfx_color3ub(255, 255, 255);
 		texture_draw(&texture_splash,
 			(settings.window_width - settings.window_height * 4.0F / 3.0F * 0.7F) * 0.5F,
 			 530 * scalef,
@@ -716,7 +713,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			 settings.window_height * 0.7F);
 
 		mu_Color color = mu_accent_color(1.F, 255);
-		glColor3ub(color.r, color.g, color.b);
+		gfx_color3ub(color.r, color.g, color.b);
 		texture_draw(
 			&texture_loader,
 			0,
@@ -725,7 +722,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			texture_white.height
 		);
 
-		glColor3f(1.0F, 1.0F, 1.0F);
+		gfx_color3f(1.0F, 1.0F, 1.0F);
 		char str[128];
 		
 		sprintf(str, "Loading Map %iKB/%iKB", compressed_chunk_data_offset / 1024,
@@ -738,33 +735,33 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			return;
 
 		if(screen_current == SCREEN_TEAM_SELECT) {
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 			char join_str[48];
 			sprintf(join_str, "Press 1 to join %s", gamestate.team_1.name);
 			font_centered(settings.window_width / 4.0F, 61 * scalef, 16.F, join_str);
 			sprintf(join_str, "Press 2 to join %s", gamestate.team_2.name);
 			font_centered(settings.window_width / 4.0F * 3.0F, 61 * scalef, 16.F, join_str);
 			font_centered(settings.window_width / 2.0F, 61 * scalef, 16.F, "Press 3 to spectate");
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 		}
 
 		if(screen_current == SCREEN_GUN_SELECT) {
-			glColor3f(1.0F, 0.0F, 0.0F);
+			gfx_color3f(1.0F, 0.0F, 0.0F);
 			font_centered(settings.window_width / 4.0F * 1.0F, 61 * scalef, 16.F, "Press 1 to select");
 			font_centered(settings.window_width / 4.0F * 2.0F, 61 * scalef, 16.F, "Press 2 to select");
 			font_centered(settings.window_width / 4.0F * 3.0F, 61 * scalef, 16.F, "Press 3 to select");
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 		}
 
 		if(chat_input_mode == CHAT_NO_INPUT && window_key_down(WINDOW_KEY_TAB) || camera_mode == CAMERAMODE_SELECTION) {
 			if(network_connected && network_logged_in) {
 				char ping_str[16];
 				sprintf(ping_str, "PING: %ims", network_ping());
-				glColor3f(1.0F, 0.0F, 0.0F);
+				gfx_color3f(1.0F, 0.0F, 0.0F);
 				font_centered(settings.window_width / 2.0F, settings.window_height - 4.F, 16.F, ping_str);
 			}
 
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 			texture_draw(&texture_splash, (settings.window_width - 210 * scalef) * 0.5F, 599 * scalef, 210 * scalef,
 						 150 * scalef);
 
@@ -812,7 +809,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 				}
 
 				char score_str[8];
-				glColor3ub(team.red, team.green, team.blue);
+				gfx_color3ub(team.red, team.green, team.blue);
 
 				if(i != 2) {
 					switch(gamestate.gamemode_type) {
@@ -833,16 +830,15 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					}
 				}
 
-				glColor4f(0, 0, 0, 0.5F);
-				glEnable(GL_BLEND);
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-				glColor4f(r, g, b, 1.F);
+				gfx_color4f(0, 0, 0, 0.5F);
+				gfx_blend(1);
+				gfx_color4f(r, g, b, 1.F);
 				texture_draw_empty(x_offset, 450 * scalef - y_offset, 300, 24.F);
-				glColor4f(r * 0.75F, g * 0.75F, b * 0.75F, 0.75F);
+				gfx_color4f(r * 0.75F, g * 0.75F, b * 0.75F, 0.75F);
 				texture_draw_empty(x_offset, 450 * scalef - y_offset, 300, i == 2 ? (21.F * (count_spec + 1)): height);
-				glDisable(GL_BLEND);
+				gfx_blend(0);
 
-				glColor3ub(255, 255, 255);
+				gfx_color3ub(255, 255, 255);
 				if(i != 2) {
 					font_render(x_offset + 300.F - font_length(16.F, score_str), 447 * scalef, 16.0F, score_str);
 					font_render(x_offset + 4.F,
@@ -876,28 +872,27 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					case TEAM_SPECTATOR: mul = 2; x_offset = settings.window_width / 2.F - 150.F; y_offset = height + 32.F; break;
 				}
 				if(pt[k].id == local_player_id)
-					glColor3f(1.0F, 1.0F, 0.0F);
+					gfx_color3f(1.0F, 1.0F, 0.0F);
 				else if(!players[pt[k].id].alive)
-					glColor3f(0.6F, 0.6F, 0.6F);
+					gfx_color3f(0.6F, 0.6F, 0.6F);
 				else
-					glColor3f(1.0F, 1.0F, 1.0F);
+					gfx_color3f(1.0F, 1.0F, 1.0F);
 				char id_str[16];
 				sprintf(id_str, "#%i", pt[k].id);
-				glEnable(GL_BLEND);
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-				glColor4f(1.F, 1.F, 1.F, 0.7F);
+				gfx_blend(1);
+				gfx_color4f(1.F, 1.F, 1.F, 0.7F);
 				font_render(x_offset + 4.F, 450 * scalef - 6.F - (20 * (cntt[mul - 1] + 1)) - y_offset,
 							16.0F, id_str);
 
 				if(players[pt[k].id].alive) {
-					glColor3f(1.F, 1.F, 1.F);
+					gfx_color3f(1.F, 1.F, 1.F);
 				} else {
-					glColor4f(1.F, 1.F, 1.F, 0.5F);
+					gfx_color4f(1.F, 1.F, 1.F, 0.5F);
 				}
 
 				font_render(x_offset + 36.F,
 							450 * scalef - 6.F - (20 * (cntt[mul - 1] + 1)) - y_offset, 16.0F, players[pt[k].id].name);
-				glDisable(GL_BLEND);
+				gfx_blend(0);
 				if(mul != 2) {
 					sprintf(id_str, "%i", pt[k].score);
 					font_render(x_offset + 300.F - font_length(16.F, id_str) - 4.F,
@@ -925,19 +920,19 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			if(cameracontroller_bodyview_player != local_player_id) {
 				font_select(FONT_FIXEDSYS);
 				switch(players[cameracontroller_bodyview_player].team) {
-					case TEAM_1: glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
-					case TEAM_2: glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
+					case TEAM_1: gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
+					case TEAM_2: gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
 				}
 				font_centered(settings.window_width / 2.0F, settings.window_height * 0.25F, 16.0F,
 							  players[cameracontroller_bodyview_player].name);
 			}
 			font_select(FONT_FIXEDSYS);
 			mu_Color color = mu_accent_color(1.F, 255);
-			glColor3ub(color.r, color.g, color.b);
+			gfx_color3ub(color.r, color.g, color.b);
 			font_centered(settings.window_width / 2.0F, settings.window_height, 16.0F,
 						  "Click to switch players");
 			if(window_time() - local_player_death_time <= local_player_respawn_time) {
-				glColor3f(1.0F, 0.0F, 0.0F);
+				gfx_color3f(1.0F, 0.0F, 0.0F);
 				int cnt = local_player_respawn_time - (int)(window_time() - local_player_death_time);
 				char coin[16];
 				sprintf(coin, "INSERT COIN:%i", cnt);
@@ -950,13 +945,13 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					local_player_respawn_cnt_last = cnt;
 				}
 			}
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 		}
 
 		if(camera_mode == CAMERAMODE_FPS
 		   || ((camera_mode == CAMERAMODE_BODYVIEW || camera_mode == CAMERAMODE_SPECTATOR)
 			   && cameracontroller_bodyview_mode)) {
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 
 			if(settings.iron_sight && players[local_id].held_item == TOOL_GUN && players[local_id].input.buttons.rmb
 			   && players[local_id].alive) {
@@ -1002,11 +997,11 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 				= is_local ? (players[local_id].alive ? local_player_health : 0) : (players[local_id].alive ? 100 : 0);
 
 			if(health <= 30)
-				glColor3f(1, 0, 0);
+				gfx_color3f(1, 0, 0);
 			else if(health <= 50)
-				glColor3f(1, 0.5F, 0);
+				gfx_color3f(1, 0.5F, 0);
 			else
-				glColor3f(1, 1, 1);
+				gfx_color3f(1, 1, 1);
 
 			font_select(FONT_FANTASY);
 			char hp[4];
@@ -1019,14 +1014,14 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			int off = 0;
 
 			struct Team* team = players[local_id].team == 0 ? &gamestate.team_1: &gamestate.team_2;
-			glColor3ub(LIGHTEN(team->red), LIGHTEN(team->green), LIGHTEN(team->blue));
+			gfx_color3ub(LIGHTEN(team->red), LIGHTEN(team->green), LIGHTEN(team->blue));
 
 			switch(players[local_id].held_item) {
 				default:
 				case TOOL_BLOCK: off = 64 * scalef;
 				case TOOL_SPADE:
 					item_mini = &texture_block;
-					glColor3ub(players[local_player_id].block.red, players[local_player_id].block.green, players[local_player_id].block.blue);
+					gfx_color3ub(players[local_player_id].block.red, players[local_player_id].block.green, players[local_player_id].block.blue);
 					sprintf(item_mini_str, "%i", is_local ? local_player_blocks : 50);
 					break;
 				case TOOL_GRENADE:
@@ -1043,7 +1038,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 						case WEAPON_SHOTGUN: item_mini = &texture_ammo_shotgun; break;
 					}
 					if(ammo == 0)
-						glColor3f(1.0F, 0.0F, 0.0F);
+						gfx_color3f(1.0F, 0.0F, 0.0F);
 					break;
 				}
 			}
@@ -1051,7 +1046,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			hud_texture_draw(item_mini, settings.window_width - texture_health.width - 8.F, item_mini->height + 8.F, texture_health.width, texture_health.height);
 			hud_font_render(settings.window_width - texture_health.width - 12.F - font_length(30.F, item_mini_str), 37.F, 30.F, item_mini_str, 1.F);
 			font_select(FONT_FIXEDSYS);
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 
 			float gmi_y = 54.F;
 
@@ -1062,7 +1057,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					for(int x = 0; x < 8; x++) {
 						if(texture_block_color(x, y) == players[local_id].block.packed) {
 							unsigned char g = (((int)(window_time() * 4)) & 1) * 0xFF;
-							glColor3ub(g, g, g);
+							gfx_color3ub(g, g, g);
 							texture_draw_empty(settings.window_width + (x * 8 - 65 - 7), 48.F + (65 - y * 8),
 											   8, 8);
 							y = 10; // to break outer loop too
@@ -1070,7 +1065,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 						}
 					}
 				}
-				glColor3f(1.0F, 1.0F, 1.0F);
+				gfx_color3f(1.0F, 1.0F, 1.0F);
 
 				texture_draw(&texture_color_selection, settings.window_width - 64 - 7, 48.F + 64, 64, 64);
 			}
@@ -1093,18 +1088,18 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					sprintf(count, "%i", team1_alive);
 
 					font_select(FONT_FANTASY);
-					glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
+					gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
 					// helmet and text
 					texture_draw_empty(settings.window_width - 8.F - 32.F, gmi_y + 32.F, 32.F, 16.F);
-					glColor3ub(255, 255, 255);
+					gfx_color3ub(255, 255, 255);
 					hud_font_render(settings.window_width - 8.F - 32.F - 30.F, gmi_y + 28.F, 30.F, count, .4F);
 
 					// skin
-					glColor3ub(222, 200, 141);
+					gfx_color3ub(222, 200, 141);
 					texture_draw_empty(settings.window_width - 8.F - 32.F, gmi_y + 16.F, 32.F, 16.F);
 
 					// eyes
-					glColor3ub(0, 0, 0);
+					gfx_color3ub(0, 0, 0);
 					texture_draw_empty(settings.window_width - 8.F - 26.F, gmi_y + 16.F, 6.F, 6.F);
 					texture_draw_empty(settings.window_width - 8.F - 11.F, gmi_y + 16.F, 6.F, 6.F);
 					// shadow
@@ -1115,18 +1110,18 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 
 					sprintf(count, "%i", team2_alive);
 					font_select(FONT_FANTASY);
-					glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
+					gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
 					// helmet and text
 					texture_draw_empty(settings.window_width - 8.F - 32.F, gmi_y + 32.F, 32.F, 16.F);
-					glColor3ub(255, 255, 255);
+					gfx_color3ub(255, 255, 255);
 					hud_font_render(settings.window_width - 8.F - 32.F - 30.F, gmi_y + 28.F, 30.F, count, .4F);
 
 					// skin
-					glColor3ub(222, 200, 141);
+					gfx_color3ub(222, 200, 141);
 					texture_draw_empty(settings.window_width - 8.F - 32.F, gmi_y + 16.F, 32.F, 16.F);
 
 					// eyes
-					glColor3ub(0, 0, 0);
+					gfx_color3ub(0, 0, 0);
 					texture_draw_empty(settings.window_width - 8.F - 26.F, gmi_y + 16.F, 6.F, 6.F);
 					texture_draw_empty(settings.window_width - 8.F - 11.F, gmi_y + 16.F, 6.F, 6.F);
 					// shadow
@@ -1170,31 +1165,26 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 						  h = (16.F + settings.chat_spacing) * chat_height;
 
 					mu_Color color = mu_accent_color(0.3F, settings.chat_shadow * 255);
-					glColor4ub(color.r, color.g, color.b, color.a);
-					glEnable(GL_BLEND);
-					glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+					gfx_color4ub(color.r, color.g, color.b, color.a);
+					gfx_blend(1);
 
 					texture_draw_empty(x, y, w, h);
 					if(chat_input_mode != CHAT_NO_INPUT) {
 						texture_draw_empty(3.0F, 90.F, chat_width + 16.0F, 42.F);
 
 						color = mu_accent_color(1.F, 255);
-						glColor4ub(color.r, color.g, color.b, color.a);
-						glLineWidth(3);
-						glBegin(GL_LINES);
-
-						glVertex2f(3.0F, 90.F);
-						glVertex2f(chat_width + 19.F, 90.F);
-
-						glEnd();
+						gfx_color4ub(color.r, color.g, color.b, color.a);
+						gfx_line_width(3);
+						float chat_line[4] = {3.0F, 90.F, chat_width + 19.F, 90.F};
+						gfx_draw_lines_2f(chat_line, 2);
 					}
 
 
-					glDisable(GL_BLEND);
+					gfx_blend(0);
 				}
 			}
 
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 
 			if(chat_input_mode != CHAT_NO_INPUT) {
 				switch(chat_input_mode) {
@@ -1215,7 +1205,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			}
 
 			for(int k = 0; k < chat_messages; k++) {
-				glColor3ub(255, 255, 255);
+				gfx_color3ub(255, 255, 255);
 				if(window_time() - chat_timer[0][k + 1] < 10.0F || chat_input_mode != CHAT_NO_INPUT) {
 					hud_render_message(0, k);
 				}
@@ -1227,7 +1217,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			}
 
 			font_select(FONT_FIXEDSYS);
-			glColor3ub(255, 255, 255);
+			gfx_color3ub(255, 255, 255);
 		}
 
 		if(gamestate.gamemode_type == GAMEMODE_TC && gamestate.progressbar.tent < gamestate.gamemode.tc.territory_count
@@ -1247,16 +1237,16 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					  2.0F);
 			if(p < 1.0F && l < 20.0F * 20.0F) {
 				switch(gamestate.gamemode.tc.territory[gamestate.progressbar.tent].team) {
-					case TEAM_1: glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
-					case TEAM_2: glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
-					default: glColor3ub(0, 0, 0);
+					case TEAM_1: gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
+					case TEAM_2: gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
+					default: gfx_color3ub(0, 0, 0);
 				}
 				texture_draw(&texture_white, (settings.window_width - 440.0F * scalef) / 2.0F + 440.0F * scalef * p,
 							 settings.window_height * 0.25F, 440.0F * scalef * (1.0F - p), 20.0F * scalef);
 				switch(gamestate.progressbar.team_capturing) {
-					case TEAM_1: glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
-					case TEAM_2: glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
-					default: glColor3ub(0, 0, 0);
+					case TEAM_1: gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
+					case TEAM_2: gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
+					default: gfx_color3ub(0, 0, 0);
 				}
 				texture_draw(&texture_white, (settings.window_width - 440.0F * scalef) / 2.0F,
 							 settings.window_height * 0.25F, 440.0F * scalef * p, 20.0F * scalef);
@@ -1265,7 +1255,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 
 		// draw the minimap
 		if(camera_mode != CAMERAMODE_SELECTION) {
-			glColor3f(1.0F, 1.0F, 1.0F);
+			gfx_color3f(1.0F, 1.0F, 1.0F);
 			// large
 			if(window_key_down(WINDOW_KEY_MAP)) {
 				float minimap_x = (settings.window_width - (map_size_x + 1) * scalef) / 2.0F;
@@ -1287,7 +1277,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 
 				if(gamestate.gamemode_type == GAMEMODE_CTF) {
 					if(!gamestate.gamemode.ctf.team_1_intel) {
-						glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
+						gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
 						texture_draw_rotated(
 							&texture_intel, minimap_x + gamestate.gamemode.ctf.team_1_intel_location.dropped.x * scalef,
 							minimap_y - gamestate.gamemode.ctf.team_1_intel_location.dropped.y * scalef, 12 * scalef,
@@ -1295,19 +1285,19 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					}
 					if(map_object_visible(gamestate.gamemode.ctf.team_1_base.x, 0.0F,
 										  gamestate.gamemode.ctf.team_1_base.y)) {
-						glColor3ub(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
+						gfx_color3ub(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
 								   gamestate.team_1.blue * 0.94F);
 						texture_draw_empty_rotated(minimap_x + gamestate.gamemode.ctf.team_1_base.x * scalef,
 												   minimap_y - gamestate.gamemode.ctf.team_1_base.y * scalef,
 												   12 * scalef, 12 * scalef, 0.0F);
-						glColor3f(1.0F, 1.0F, 1.0F);
+						gfx_color3f(1.0F, 1.0F, 1.0F);
 						texture_draw_rotated(
 							&texture_medical, minimap_x + gamestate.gamemode.ctf.team_1_base.x * scalef,
 							minimap_y - gamestate.gamemode.ctf.team_1_base.y * scalef, 12 * scalef, 12 * scalef, 0.0F);
 					}
 
 					if(!gamestate.gamemode.ctf.team_2_intel) {
-						glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
+						gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
 						texture_draw_rotated(
 							&texture_intel, minimap_x + gamestate.gamemode.ctf.team_2_intel_location.dropped.x * scalef,
 							minimap_y - gamestate.gamemode.ctf.team_2_intel_location.dropped.y * scalef, 12 * scalef,
@@ -1315,12 +1305,12 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					}
 					if(map_object_visible(gamestate.gamemode.ctf.team_2_base.x, 0.0F,
 										  gamestate.gamemode.ctf.team_2_base.y)) {
-						glColor3ub(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
+						gfx_color3ub(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
 								   gamestate.team_2.blue * 0.94F);
 						texture_draw_empty_rotated(minimap_x + gamestate.gamemode.ctf.team_2_base.x * scalef,
 												   minimap_y - gamestate.gamemode.ctf.team_2_base.y * scalef,
 												   12 * scalef, 12 * scalef, 0.0F);
-						glColor3f(1.0F, 1.0F, 1.0F);
+						gfx_color3f(1.0F, 1.0F, 1.0F);
 						texture_draw_rotated(
 							&texture_medical, minimap_x + gamestate.gamemode.ctf.team_2_base.x * scalef,
 							minimap_y - gamestate.gamemode.ctf.team_2_base.y * scalef, 12 * scalef, 12 * scalef, 0.0F);
@@ -1330,15 +1320,15 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					for(int k = 0; k < gamestate.gamemode.tc.territory_count; k++) {
 						switch(gamestate.gamemode.tc.territory[k].team) {
 							case TEAM_1:
-								glColor3f(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
+								gfx_color3f(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
 										  gamestate.team_1.blue * 0.94F);
 								break;
 							case TEAM_2:
-								glColor3f(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
+								gfx_color3f(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
 										  gamestate.team_2.blue * 0.94F);
 								break;
 							default:
-							case TEAM_SPECTATOR: glColor3ub(0, 0, 0);
+							case TEAM_SPECTATOR: gfx_color3ub(0, 0, 0);
 						}
 						texture_draw_rotated(
 							&texture_command, minimap_x + gamestate.gamemode.tc.territory[k].x * scalef,
@@ -1352,10 +1342,10 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					   && (players[k].team == players[local_player_id].team || camera_mode == CAMERAMODE_SPECTATOR)) {
 						switch(players[k].team) {
 							case TEAM_1:
-								glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
+								gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
 								break;
 							case TEAM_2:
-								glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
+								gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
 								break;
 						}
 						float ang = -atan2(players[k].orientation.z, players[k].orientation.x) - HALFPI;
@@ -1364,30 +1354,30 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					}
 				}
 
-				glColor3f(0.0F, 1.0F, 1.0F);
+				gfx_color3f(0.0F, 1.0F, 1.0F);
 				texture_draw_rotated(&texture_player, minimap_x + camera_x * scalef, minimap_y - camera_z * scalef,
 									 12 * scalef, 12 * scalef, camera_rot_x + PI);
-				glColor3f(1.0F, 1.0F, 1.0F);
+				gfx_color3f(1.0F, 1.0F, 1.0F);
 			} else {
 				// minimized, top right
 				float view_x = camera_x - 64.0F; // min(max(camera_x-64.0F,0.0F),map_size_x+1-128.0F);
 				float view_z = camera_z - 64.0F; // min(max(camera_z-64.0F,0.0F),map_size_z+1-128.0F);
 				char sector_str[3] = {(int)(camera_x / 64.0F) + 'A', (int)(camera_z / 64.0F) + '1', 0};
-				glColor4f(0.F, 0.F, 0.F, 0.7F);
+				gfx_color4f(0.F, 0.F, 0.F, 0.7F);
 
 				switch(players[local_player_id].team) {
-					case TEAM_1: glColor3ub(LIGHTEN(gamestate.team_1.red), LIGHTEN(gamestate.team_1.green), LIGHTEN(gamestate.team_1.blue)); break;
-					case TEAM_2: glColor3ub(LIGHTEN(gamestate.team_2.red), LIGHTEN(gamestate.team_2.green), LIGHTEN(gamestate.team_2.blue)); break;
+					case TEAM_1: gfx_color3ub(LIGHTEN(gamestate.team_1.red), LIGHTEN(gamestate.team_1.green), LIGHTEN(gamestate.team_1.blue)); break;
+					case TEAM_2: gfx_color3ub(LIGHTEN(gamestate.team_2.red), LIGHTEN(gamestate.team_2.green), LIGHTEN(gamestate.team_2.blue)); break;
 					case TEAM_SPECTATOR:
-					default: glColor3ub(150, 150, 150);
+					default: gfx_color3ub(150, 150, 150);
 				}
 				font_select(FONT_FANTASY);
 				hud_font_render_centered(settings.window_width - 77 * scalef, 454 * scalef, 30.F, sector_str, 1.F);
 				font_select(FONT_FIXEDSYS);
 
-				glColor3ub(0, 0, 0);
+				gfx_color3ub(0, 0, 0);
 				texture_draw_empty(settings.window_width - 144 * scalef, 586 * scalef, 130 * scalef, 130 * scalef);
-				glColor3f(1.0F, 1.0F, 1.0F);
+				gfx_color3f(1.0F, 1.0F, 1.0F);
 
 				texture_draw_sector(&texture_minimap, settings.window_width - 143 * scalef, 585 * scalef, 128 * scalef,
 									128 * scalef, (camera_x - 64.0F) / 512.0F, (camera_z - 64.0F) / 512.0F, 0.25F,
@@ -1404,11 +1394,11 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 
 					if(map_object_visible(gamestate.gamemode.ctf.team_1_base.x, 0.0F,
 										  gamestate.gamemode.ctf.team_1_base.y)) {
-						glColor3ub(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
+						gfx_color3ub(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
 								   gamestate.team_1.blue * 0.94F);
 						texture_draw_empty_rotated(settings.window_width - 143 * scalef + tent1_x * scalef,
 												   (585 - tent1_y) * scalef, 12 * scalef, 12 * scalef, 0.0F);
-						glColor3f(1.0F, 1.0F, 1.0F);
+						gfx_color3f(1.0F, 1.0F, 1.0F);
 						texture_draw_rotated(&texture_medical, settings.window_width - 143 * scalef + tent1_x * scalef,
 											 (585 - tent1_y) * scalef, 12 * scalef, 12 * scalef, 0.0F);
 					}
@@ -1419,18 +1409,18 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 						float intel_y
 							= min(max(gamestate.gamemode.ctf.team_1_intel_location.dropped.y, view_z), view_z + 128.0F)
 							- view_z;
-						glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
+						gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
 						texture_draw_rotated(&texture_intel, settings.window_width - 143 * scalef + intel_x * scalef,
 											 (585 - intel_y) * scalef, 12 * scalef, 12 * scalef, 0.0F);
 					}
 
 					if(map_object_visible(gamestate.gamemode.ctf.team_2_base.x, 0.0F,
 										  gamestate.gamemode.ctf.team_2_base.y)) {
-						glColor3ub(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
+						gfx_color3ub(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
 								   gamestate.team_2.blue * 0.94F);
 						texture_draw_empty_rotated(settings.window_width - 143 * scalef + tent2_x * scalef,
 												   (585 - tent2_y) * scalef, 12 * scalef, 12 * scalef, 0.0F);
-						glColor3f(1.0F, 1.0F, 1.0F);
+						gfx_color3f(1.0F, 1.0F, 1.0F);
 						texture_draw_rotated(&texture_medical, settings.window_width - 143 * scalef + tent2_x * scalef,
 											 (585 - tent2_y) * scalef, 12 * scalef, 12 * scalef, 0.0F);
 					}
@@ -1441,7 +1431,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 						float intel_y
 							= min(max(gamestate.gamemode.ctf.team_2_intel_location.dropped.y, view_z), view_z + 128.0F)
 							- view_z;
-						glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
+						gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
 						texture_draw_rotated(&texture_intel, settings.window_width - 143 * scalef + intel_x * scalef,
 											 (585 - intel_y) * scalef, 12 * scalef, 12 * scalef, 0.0F);
 					}
@@ -1450,15 +1440,15 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 					for(int k = 0; k < gamestate.gamemode.tc.territory_count; k++) {
 						switch(gamestate.gamemode.tc.territory[k].team) {
 							case TEAM_1:
-								glColor3f(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
+								gfx_color3f(gamestate.team_1.red * 0.94F, gamestate.team_1.green * 0.94F,
 										  gamestate.team_1.blue * 0.94F);
 								break;
 							case TEAM_2:
-								glColor3f(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
+								gfx_color3f(gamestate.team_2.red * 0.94F, gamestate.team_2.green * 0.94F,
 										  gamestate.team_2.blue * 0.94F);
 								break;
 							default:
-							case TEAM_SPECTATOR: glColor3ub(0, 0, 0);
+							case TEAM_SPECTATOR: gfx_color3ub(0, 0, 0);
 						}
 						float t_x = min(max(gamestate.gamemode.tc.territory[k].x, view_x), view_x + 128.0F) - view_x;
 						float t_y = min(max(gamestate.gamemode.tc.territory[k].y, view_z), view_z + 128.0F) - view_z;
@@ -1473,14 +1463,14 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 						   || (camera_mode == CAMERAMODE_SPECTATOR
 							   && (k == local_player_id || players[k].team != TEAM_SPECTATOR)))) {
 						if(k == local_player_id) {
-							glColor3ub(0, 255, 255);
+							gfx_color3ub(0, 255, 255);
 						} else {
 							switch(players[k].team) {
 								case TEAM_1:
-									glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
+									gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue);
 									break;
 								case TEAM_2:
-									glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
+									gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue);
 									break;
 							}
 						}
@@ -1510,46 +1500,43 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 			char* th[4] = {"torso", "head", "arms", "legs"};
 			char str[32];
 			switch(players[player_intersection_player].team) {
-				case TEAM_1: glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
-				case TEAM_2: glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
-				default: glColor3f(1.0F, 1.0F, 1.0F);
+				case TEAM_1: gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
+				case TEAM_2: gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
+				default: gfx_color3f(1.0F, 1.0F, 1.0F);
 			}
 			sprintf(str, "%s's %s", players[player_intersection_player].name, th[player_intersection_type]);
 			font_centered(settings.window_width / 2.0F, settings.window_height * 0.2F, 16.0F, str);
 		}
 
 		if(window_time() - chat_popup_timer < chat_popup_duration) {
-			glColor3ub(red(chat_popup_color), green(chat_popup_color), blue(chat_popup_color));
+			gfx_color3ub(red(chat_popup_color), green(chat_popup_color), blue(chat_popup_color));
 			font_centered(settings.window_width / 2.F, settings.window_height / 2.0F, 32.F, chat_popup);
 		}
-		glColor3f(1.0F, 1.0F, 1.0F);
+		gfx_color3f(1.0F, 1.0F, 1.0F);
 	}
 
 	if(settings.show_fps) {
 		mu_Color color = mu_accent_color(0.3F, settings.chat_shadow * 255);
-		glColor4ub(color.r, color.g, color.b, color.a);
+		gfx_color4ub(color.r, color.g, color.b, color.a);
 
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		gfx_blend(1);
 
 		texture_draw_empty(settings.window_width - 105.F, settings.window_height / 2.F - 18.F + 84.F, 100.F, 36.F);
 
 		color = mu_accent_color(1.F, 255);
-		glColor3ub(color.r, color.g, color.b);
-		glLineWidth(3);
-		glBegin(GL_LINES);
-
-		glVertex2f(settings.window_width - 5.F, floor(settings.window_height / 2.F - 18.F + 84.F));
-		glVertex2f(settings.window_width - 5.F, floor(settings.window_height / 2.F - 18.F + 48.F));
-
-		glEnd();
-		glLineWidth(1);
-		glColor3ub(255, 255, 255);
-		glDisable(GL_BLEND);
+		gfx_color3ub(color.r, color.g, color.b);
+		gfx_line_width(3);
+		float fps_line[4]
+			= {settings.window_width - 5.F, floor(settings.window_height / 2.F - 18.F + 84.F),
+			   settings.window_width - 5.F, floor(settings.window_height / 2.F - 18.F + 48.F)};
+		gfx_draw_lines_2f(fps_line, 2);
+		gfx_line_width(1);
+		gfx_color3ub(255, 255, 255);
+		gfx_blend(0);
 
 		char debug_str[16];
 		font_select(FONT_FIXEDSYS);
-		glColor3f(1.0F, 1.0F, 1.0F);
+		gfx_color3f(1.0F, 1.0F, 1.0F);
 		sprintf(debug_str, "%ims", network_ping());
 		font_render(settings.window_width - 17.0F - font_length(16.F, debug_str), settings.window_height / 2.F - 18.F + 82.F, 16.0F, debug_str);
 		sprintf(debug_str, "%i fps", (int)fps);
@@ -1557,7 +1544,7 @@ static void hud_ingame_render(mu_Context* ctx, float scalex, float scalef) {
 	}
 
 #ifdef USE_TOUCH
-	glColor3f(1.0F, 1.0F, 1.0F);
+	gfx_color3f(1.0F, 1.0F, 1.0F);
 	if(camera_mode == CAMERAMODE_FPS || camera_mode == CAMERAMODE_SPECTATOR) {
 		texture_draw_rotated(&texture_ui_joystick, settings.window_height * 0.3F, settings.window_height * 0.3F,
 							 settings.window_height * 0.4F, settings.window_height * 0.4F, 0.0F);

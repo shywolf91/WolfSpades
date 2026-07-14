@@ -234,14 +234,13 @@ void font_render(float x, float y, float h, char* text) {
 
 void font_render_shadow(float x, float y, float h, char* text, float a) {
 	float color[4];
-	/* Color is set by callers (hud/main) via raw glColor*; not gfx last-write-wins. */
-	glGetFloatv(GL_CURRENT_COLOR, color);
+	gfx_get_color4f(color);
 
-	glColor4f(0.F, 0.F, 0.F, a);
+	gfx_color4f(0.F, 0.F, 0.F, a);
 	font_render(x, y - 1.F, h, text);
 	font_render(x, y - 2.F, h, text);
 
-	glColor4f(color[0], color[1], color[2], color[3]);
+	gfx_color4f(color[0], color[1], color[2], color[3]);
 	font_render(x, y, h, text);
 }
 

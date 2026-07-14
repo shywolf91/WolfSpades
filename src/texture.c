@@ -180,14 +180,13 @@ void texture_draw(struct texture* t, float x, float y, float w, float h) {
 
 void texture_draw_shadow(struct texture* t, float x, float y, float w, float h) {
 	float color[4];
-	/* Color is set by callers (hud/main) via raw glColor*; not gfx last-write-wins. */
-	glGetFloatv(GL_CURRENT_COLOR, color);
+	gfx_get_color4f(color);
 
-	glColor4f(0.F, 0.F, 0.F, 1.F);
+	gfx_color4f(0.F, 0.F, 0.F, 1.F);
 	texture_draw(t, x, y - 1.F, w, h);
 	texture_draw(t, x, y - 2.F, w, h);
 
-	glColor4f(color[0], color[1], color[2], color[3]);
+	gfx_color4f(color[0], color[1], color[2], color[3]);
 	texture_draw(t, x, y, w, h);
 }
 

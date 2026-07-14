@@ -131,8 +131,7 @@ static bool damaged_voxel_update(void* key, void* value, void* user) {
 void map_damaged_voxels_render() {
 	matrix_identity(matrix_model);
 	matrix_upload();
-	// glEnable(GL_POLYGON_OFFSET_FILL);
-	// glPolygonOffset(0.0F,-100.0F);
+	/* polygon offset fill (disabled) */
 	gfx_pass_begin(GFX_PASS_DAMAGED);
 
 	tesselator_clear(&map_damaged_tesselator);
@@ -142,8 +141,7 @@ void map_damaged_voxels_render() {
 	tesselator_draw(&map_damaged_tesselator, 1);
 
 	gfx_pass_end(GFX_PASS_DAMAGED);
-	// glPolygonOffset(0.0F,0.0F);
-	// glDisable(GL_POLYGON_OFFSET_FILL);
+	/* polygon offset restore (disabled) */
 }
 
 struct map_work_packet {

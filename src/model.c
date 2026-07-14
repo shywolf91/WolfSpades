@@ -501,14 +501,14 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 		float point_size = 1.414F * near_plane_height * kv6->scale * (len_x + len_y + len_z) / 3.0F;
 
 #ifndef OPENGL_ES
-		if(!glx_version)
+		if(!gfx_gl2())
 #endif
 		{
 			gfx_model_points_begin_fixed(point_size);
 		}
 
 #ifndef OPENGL_ES
-		if(glx_version) {
+		if(gfx_gl2()) {
 			float dist_factor = gfx_fog_active() ? 1.0F / settings.render_distance : 0.0F;
 			float camera[3] = {camera_x, camera_y, camera_z};
 			gfx_model_points_begin_shader(point_size, dist_factor, fog_color, camera, (float*)matrix_model);
@@ -539,13 +539,13 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 		if(settings.multisamples)
 			gfx_multisample(1);
 #ifndef OPENGL_ES
-		if(glx_version) {
+		if(gfx_gl2()) {
 			gfx_model_points_end_shader();
 		}
 #endif
 
 #ifndef OPENGL_ES
-		if(!glx_version)
+		if(!gfx_gl2())
 #endif
 		{
 			gfx_model_points_end_fixed();

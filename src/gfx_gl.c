@@ -17,20 +17,46 @@
 	along with BetterSpades.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#ifndef OPENGL_ES
+#define GLEW_STATIC
+#include <GL/glew.h>
+#else
+#ifdef USE_SDL
+#include <SDL2/SDL_opengles.h>
+#endif
+#define glColor3f(r, g, b) glColor4f(r, g, b, 1.0F)
+#define glColor3ub(r, g, b) glColor4ub(r, g, b, 255)
+#define glDepthRange(a, b) glDepthRangef(a, b)
+#define glClearDepth(a) glClearDepthf(a)
+#endif
 
 #include "common.h"
 #include "config.h"
 #include "log.h"
 #include "gfx.h"
-#include "glx.h"
 #include "camera.h"
 #include "matrix.h"
 #include "map.h"
 #include "texture.h"
 
 static void* gfx_window;
+
+/* Former glx_version / glx_fog — owned by the GL backend only. */
+static int gfx_gl2_flag = 0;
+static int gfx_fog_flag = 0;
+
+static float gfx_current_color[4] = {1.0F, 1.0F, 1.0F, 1.0F};
+
+static void gfx_track_color4f(float r, float g, float b, float a) {
+	gfx_current_color[0] = r;
+	gfx_current_color[1] = g;
+	gfx_current_color[2] = b;
+	gfx_current_color[3] = a;
+}
 
 void gfx_apply_context_hints(void) {
 #ifdef USE_GLFW
@@ -78,6 +104,13 @@ void gfx_init(void* window) {
 #ifndef OPENGL_ES
 	if(glewInit())
 		log_error("Could not load extended OpenGL functions!");
+
+	{
+		const char* ver = (const char*)glGetString(GL_VERSION);
+		gfx_gl2_flag = ver ? (atoi(ver) >= 2) : 0;
+	}
+#else
+	gfx_gl2_flag = 0;
 #endif
 
 	log_info("Vendor: %s", glGetString(GL_VENDOR));
@@ -279,7 +312,7 @@ void gfx_mesh_create(gfx_mesh_t* m, int has_color, int has_normal) {
 	m->has_normal = has_normal;
 
 #ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
+	if(!gfx_gl2_flag || settings.force_displaylist) {
 		m->legacy = glGenLists(1);
 	} else {
 		glGenBuffers(1, &m->modern);
@@ -292,7 +325,7 @@ void gfx_mesh_create(gfx_mesh_t* m, int has_color, int has_normal) {
 
 void gfx_mesh_destroy(gfx_mesh_t* m) {
 #ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
+	if(!gfx_gl2_flag || settings.force_displaylist) {
 		glDeleteLists(m->legacy, 1);
 	} else {
 		glDeleteBuffers(1, &m->modern);
@@ -309,7 +342,7 @@ void gfx_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const vo
 	m->size = count;
 
 #ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
+	if(!gfx_gl2_flag || settings.force_displaylist) {
 		glEnableClientState(GL_VERTEX_ARRAY);
 		if(m->has_color)
 			glEnableClientState(GL_COLOR_ARRAY);
@@ -368,7 +401,7 @@ void gfx_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const vo
 
 void gfx_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type) {
 #ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
+	if(!gfx_gl2_flag || settings.force_displaylist) {
 		glCallList(m->legacy);
 	} else {
 #endif
@@ -517,11 +550,116 @@ void gfx_pass_end(gfx_pass_t pass) {
 }
 
 void gfx_color3f(float r, float g, float b) {
+	gfx_track_color4f(r, g, b, 1.0F);
 	glColor3f(r, g, b);
 }
 
 void gfx_color3ub(unsigned char r, unsigned char g, unsigned char b) {
+	gfx_track_color4f(r / 255.0F, g / 255.0F, b / 255.0F, 1.0F);
 	glColor3ub(r, g, b);
+}
+
+void gfx_color4f(float r, float g, float b, float a) {
+	gfx_track_color4f(r, g, b, a);
+	glColor4f(r, g, b, a);
+}
+
+void gfx_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+	gfx_track_color4f(r / 255.0F, g / 255.0F, b / 255.0F, a / 255.0F);
+	glColor4ub(r, g, b, a);
+}
+
+void gfx_get_color4f(float out[4]) {
+	out[0] = gfx_current_color[0];
+	out[1] = gfx_current_color[1];
+	out[2] = gfx_current_color[2];
+	out[3] = gfx_current_color[3];
+}
+
+void gfx_line_width(float w) {
+	glLineWidth(w);
+}
+
+void gfx_draw_lines_2f(const float* xy_pairs, int vertex_count) {
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glVertexPointer(2, GL_FLOAT, 0, xy_pairs);
+	glDrawArrays(GL_LINES, 0, vertex_count);
+	glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void gfx_draw_lines_3s(const short* xyz, int vertex_count) {
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glVertexPointer(3, GL_SHORT, 0, xyz);
+	glDrawArrays(GL_LINES, 0, vertex_count);
+	glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void gfx_depth_range_weapon(void) {
+	glDepthRange(0.0F, 0.05F);
+}
+
+void gfx_depth_range_reset(void) {
+	glDepthRange(0.0F, 1.0F);
+}
+
+void gfx_depth_test(int enabled) {
+	if(enabled)
+		glEnable(GL_DEPTH_TEST);
+	else
+		glDisable(GL_DEPTH_TEST);
+}
+
+void gfx_depth_func_notequal(void) {
+	glDepthFunc(GL_NOTEQUAL);
+}
+
+void gfx_depth_func_lequal(void) {
+	glDepthFunc(GL_LEQUAL);
+}
+
+void gfx_scissor(int x, int y, int w, int h) {
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(x, y, w, h);
+}
+
+void gfx_scissor_off(void) {
+	glDisable(GL_SCISSOR_TEST);
+}
+
+void gfx_viewport(int x, int y, int w, int h) {
+	glViewport(x, y, w, h);
+}
+
+void gfx_clear_color(float r, float g, float b, float a) {
+	glClearColor(r, g, b, a);
+}
+
+void gfx_clear(void) {
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void gfx_clear_color_only(void) {
+	glClear(GL_COLOR_BUFFER_BIT);
+}
+
+void gfx_shade_smooth(void) {
+	glShadeModel(GL_SMOOTH);
+}
+
+void gfx_shade_flat(void) {
+	glShadeModel(GL_FLAT);
+}
+
+void gfx_light0_position(const float pos4[4]) {
+	glLightfv(GL_LIGHT0, GL_POSITION, pos4);
+}
+
+void gfx_capture_framebuffer(int x, int y, int w, int h, void* out_rgba) {
+	glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, out_rgba);
+}
+
+int gfx_gl2(void) {
+	return gfx_gl2_flag;
 }
 
 void gfx_multisample(int enabled) {
@@ -758,7 +896,7 @@ void gfx_fog_enable_spherical(void) {
 	glFogf(GL_FOG_END, settings.render_distance);
 	glFogfv(GL_FOG_COLOR, fog_color);
 #endif
-	glx_fog = 1;
+	gfx_fog_flag = 1;
 }
 
 void gfx_fog_disable_spherical(void) {
@@ -786,9 +924,9 @@ void gfx_fog_disable_spherical(void) {
 	float a[4] = {0.2F, 0.2F, 0.2F, 1.0F};
 	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, a);
 #endif
-	glx_fog = 0;
+	gfx_fog_flag = 0;
 }
 
 int gfx_fog_active(void) {
-	return glx_fog;
+	return gfx_fog_flag;
 }

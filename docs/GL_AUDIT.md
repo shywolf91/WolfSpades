@@ -605,3 +605,89 @@ Reused: `gfx_texture_2d`, `gfx_mesh_*`.
 ### `gfx.h` GL-type leak check
 
 Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outside `gfx_` prefix is empty.
+
+---
+
+## Phase 1b progress — Step 6: final mop-up + full GL isolation
+
+**Date:** 2026-07-14  
+**Scope:** Every remaining raw GL call site outside `gfx_gl.c`. Mechanical wrap only. Zero behavior change. `gfx_gl.c` is the sole OpenGL owner in `src/`.
+
+### API added
+
+| API | Role |
+|-----|------|
+| `gfx_color4f` / `gfx_color4ub` / `gfx_get_color4f` | HUD/microui colors; CPU-tracked for font/texture shadows |
+| `gfx_line_width` | HUD / block-outline widths |
+| `gfx_draw_lines_2f` / `gfx_draw_lines_3s` | Replace `glBegin(GL_LINES)` / client-array outline |
+| `gfx_depth_range_weapon` / `gfx_depth_range_reset` | Exact `0..0.05` / `0..1` FP weapon pair |
+| `gfx_depth_test` / `gfx_depth_func_notequal` / `gfx_depth_func_lequal` | Network-stats outline technique |
+| `gfx_scissor` / `gfx_scissor_off` | microui clip |
+| `gfx_viewport` | HUD rotating-model viewport hack |
+| `gfx_clear_color` / `gfx_clear` / `gfx_clear_color_only` | Frame clear |
+| `gfx_shade_smooth` / `gfx_shade_flat` | AO / flat shading |
+| `gfx_light0_position` | Per-frame light position |
+| `gfx_capture_framebuffer` | Screenshot `RGBA8` readback (row flip stays in `main.c`) |
+| `gfx_gl2` | Former `glx_version` flag (set in `gfx_init`) |
+
+### Per-file conversion
+
+| File | Approx. sites before | Result |
+|------|---------------------:|--------|
+| `hud.c` | ~140 | all → `gfx_*` (colors, blend, lines, depth range, netstat mask, viewport) |
+| `main.c` | ~35 | shade/clear/light/outline/weapon depth/microui/screenshot → `gfx_*`; `glx_init` removed |
+| `font.c` / `texture.c` | 3 each | shadows → `gfx_get_color4f` + `gfx_color4f` |
+| `player.c` | 2 | nametag color → `gfx_color3ub` |
+| `map.c` / `chunk.c` | commented only | comments scrubbed so isolation greps pass |
+| `common.h` | GLEW/ES includes | moved into `gfx_gl.c` only |
+| `glx.c` / `glx.h` | thin wrappers + unused shader | **deleted**; CMakeLists updated |
+| `model.h` / `model.c` | `glx_displaylist` / `glx_version` | → `gfx_mesh_t` / `gfx_gl2()` |
+
+### Deferred / Phase 2+ (justified)
+
+| Item | Note |
+|------|------|
+| Screenshot path | Isolates readback only; Vulkan capture is a later concern |
+| `settings.opengl14` name | Config flag name; not a GL call |
+| GLFW may transitively include system GL headers via `glfw3.h` | Not present as a `GL/gl` string in `src/` sources; context still created by `gfx_*` |
+
+---
+
+## Phase 1 exit criteria
+
+**Date:** 2026-07-14
+
+### Isolation greps (verbatim)
+
+**1.** `rg -n "GL/gl" src/ --glob "*.c" --glob "*.h"`
+
+```
+src/gfx_gl.c:26:#include <GL/glew.h>
+```
+
+(ES builds also allow `#include <SDL2/SDL_opengles.h>` inside `gfx_gl.c` only.)
+
+**2.** `rg -n "\bgl[A-Z]" src/ --glob "*.c"` → matches **only** in `src/gfx_gl.c` (no other `.c` files).
+
+**3.** `rg -in "gl" src/gfx.h` → only `gfx_`-prefixed identifiers (e.g. `gfx_gl2`).
+
+### Final per-file GL call count
+
+| File | Original (Phase 1a) | After Step 6 |
+|------|--------------------:|-------------:|
+| `hud.c` | 154 | **0** |
+| `glx.c` | 110 | **deleted** |
+| `texture.c` | 70 | **0** |
+| `model.c` | 63 | **0** |
+| `main.c` | 63 | **0** |
+| `font.c` | 35 | **0** |
+| `tesselator.c` | 12 | **0** |
+| `map.c` | 10 | **0** |
+| `player.c` | 7 | **0** |
+| `matrix.c` | 5 | **0** |
+| `chunk.c` | 3 | **0** |
+| `window.c` | 0 direct | **0** |
+| `gfx_gl.c` | (created in 1b) | **all remaining GL** |
+
+**Phase 1 complete:** game code talks only to `gfx.h`; OpenGL lives solely in `gfx_gl.c`.
+

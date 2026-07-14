@@ -98,9 +98,9 @@ void chat_showpopup(const char* msg, float duration, int color) {
 
 void drawScene() {
 	if(settings.ambient_occlusion) {
-		glShadeModel(GL_SMOOTH);
+		gfx_shade_smooth();
 	} else {
-		glShadeModel(GL_FLAT);
+		gfx_shade_flat();
 	}
 
 	matrix_upload();
@@ -110,7 +110,7 @@ void drawScene() {
 		gfx_fog_enable_exp2(fog_color, 0.015F);
 	}
 
-	glShadeModel(GL_FLAT);
+	gfx_shade_flat();
 	kv6_calclight(-1, -1, -1);
 	matrix_upload();
 	particle_render();
@@ -181,9 +181,9 @@ void drawScene() {
 
 void display() {
 	if(network_map_transfer) {
-		glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
+		gfx_clear_color(0.0F, 0.0F, 0.0F, 1.0F);
 	} else {
-		glClearColor(fog_color[0], fog_color[1], fog_color[2], fog_color[3]);
+		gfx_clear_color(fog_color[0], fog_color[1], fog_color[2], fog_color[3]);
 	}
 
 	if(hud_active->render_world) {
@@ -191,7 +191,7 @@ void display() {
 
 		chunk_update_all();
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		gfx_clear();
 
 		if(settings.opengl14) {
 			matrix_identity(matrix_projection);
@@ -206,7 +206,7 @@ void display() {
 			matrix_upload();
 
 			float lpos[4] = {0.0F, -1.0F, 1.0F, 0.0F};
-			glLightfv(GL_LIGHT0, GL_POSITION, lpos);
+			gfx_light0_position(lpos);
 		}
 
 		camera_ExtractFrustum();
@@ -278,8 +278,8 @@ void display() {
 			if(pos != NULL && pos[1] > 1
 			   && (pow(pos[0] - camera_x, 2) + pow(pos[1] - camera_y, 2) + pow(pos[2] - camera_z, 2)) < 5 * 5) {
 				matrix_upload();
-				glColor3f(1.0F, 0.0F, 0.0F);
-				glLineWidth(1.0F);
+				gfx_color3f(1.0F, 0.0F, 0.0F);
+				gfx_line_width(1.0F);
 				gfx_pass_begin(GFX_PASS_BLOCK_OUTLINE);
 				struct Point cubes[64];
 				int amount = 0;
@@ -298,7 +298,7 @@ void display() {
 					cubes[amount - 1].y = 63 - cubes[amount - 1].z;
 					cubes[amount - 1].z = tmp;
 					if(amount <= (is_local ? local_player_blocks : 50))
-						glColor3f(1.0F, 1.0F, 1.0F);
+						gfx_color3f(1.0F, 1.0F, 1.0F);
 
 					short vertices[72] = {cubes[amount - 1].x,	   cubes[amount - 1].y,		cubes[amount - 1].z,
 										  cubes[amount - 1].x,	   cubes[amount - 1].y,		cubes[amount - 1].z + 1,
@@ -327,15 +327,12 @@ void display() {
 										  cubes[amount - 1].x,	   cubes[amount - 1].y,		cubes[amount - 1].z + 1,
 										  cubes[amount - 1].x,	   cubes[amount - 1].y + 1, cubes[amount - 1].z + 1};
 					if(local_player_drag_active) {
-						glLineWidth(8);
+						gfx_line_width(8);
 					} else {
-						glLineWidth(1);
+						gfx_line_width(1);
 					}
 
-					glEnableClientState(GL_VERTEX_ARRAY);
-					glVertexPointer(3, GL_SHORT, 0, vertices);
-					glDrawArrays(GL_LINES, 0, 24);
-					glDisableClientState(GL_VERTEX_ARRAY);
+					gfx_draw_lines_3s(vertices, 24);
 					amount--;
 				}
 				gfx_pass_end(GFX_PASS_BLOCK_OUTLINE);
@@ -353,7 +350,7 @@ void display() {
 					float tmp2 = players[local_player_id].physics.eye.y;
 					players[local_player_id].physics.eye.y = last_cy;
 					if(camera_mode == CAMERAMODE_FPS)
-						glDepthRange(0.0F, 0.05F);
+						gfx_depth_range_weapon();
 					matrix_push(matrix_projection);
 					matrix_translate(matrix_projection, 0.0F, -0.25F, 0.0F);
 					matrix_upload_p();
@@ -367,7 +364,7 @@ void display() {
 						gfx_fog_enable_spherical();
 #endif
 					matrix_pop(matrix_projection);
-					glDepthRange(0.0F, 1.0F);
+					gfx_depth_range_reset();
 					players[local_player_id].physics.eye.y = tmp2;
 				}
 			}
@@ -381,7 +378,7 @@ void display() {
 			matrix_upload();
 
 			if(!map_isair(camera_x, camera_y, camera_z))
-				glClear(GL_COLOR_BUFFER_BIT);
+				gfx_clear_color_only();
 
 			gfx_fog_disable_spherical();
 			if(settings.smooth_fog)
@@ -420,25 +417,24 @@ void display() {
 		if(ctx) {
 			mu_end(ctx);
 
-			glEnable(GL_BLEND);
-			glEnable(GL_SCISSOR_TEST);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			gfx_blend(1);
+			gfx_scissor(0, 0, settings.window_width, settings.window_height);
 			mu_Command* cmd = NULL;
 			while(mu_next_command(ctx, &cmd)) {
 				switch(cmd->type) {
 					case MU_COMMAND_TEXT:
-						glColor4ub(cmd->text.color.r, cmd->text.color.g, cmd->text.color.b, cmd->text.color.a);
+						gfx_color4ub(cmd->text.color.r, cmd->text.color.g, cmd->text.color.b, cmd->text.color.a);
 						font_render(cmd->text.pos.x, settings.window_height - cmd->text.pos.y,
 									ctx->text_height(cmd->text.font), cmd->text.str);
-						glEnable(GL_BLEND);
+						gfx_blend(1);
 						break;
 					case MU_COMMAND_RECT:
-						glColor4ub(cmd->rect.color.r, cmd->rect.color.g, cmd->rect.color.b, cmd->rect.color.a);
+						gfx_color4ub(cmd->rect.color.r, cmd->rect.color.g, cmd->rect.color.b, cmd->rect.color.a);
 						texture_draw_empty(cmd->rect.rect.x, settings.window_height - cmd->rect.rect.y,
 										   cmd->rect.rect.w, cmd->rect.rect.h);
 						break;
 					case MU_COMMAND_ICON:
-						glColor4ub(cmd->icon.color.r, cmd->icon.color.g, cmd->icon.color.b, cmd->icon.color.a);
+						gfx_color4ub(cmd->icon.color.r, cmd->icon.color.g, cmd->icon.color.b, cmd->icon.color.a);
 						int size = min(cmd->icon.rect.w, cmd->icon.rect.h);
 
 						if(cmd->icon.id >= HUD_FLAG_INDEX_START - 1) {
@@ -448,7 +444,7 @@ void display() {
 							texture_draw_sector(&texture_ui_flags, cmd->icon.rect.x,
 												settings.window_height - cmd->icon.rect.y - size * 0.167F, size,
 												size * 0.667F, u, v, 18.0F / 256.0F, 12.0F / 256.0F);
-							glEnable(GL_BLEND);
+							gfx_blend(1);
 						} else if(hud_active->ui_images) {
 							bool resize = false;
 							struct texture* img = hud_active->ui_images(cmd->icon.id, &resize);
@@ -456,19 +452,19 @@ void display() {
 							if(img) {
 								texture_draw(img, cmd->icon.rect.x, settings.window_height - cmd->icon.rect.y,
 											 resize ? size : cmd->icon.rect.w, resize ? size : cmd->icon.rect.h);
-								glEnable(GL_BLEND);
+								gfx_blend(1);
 							}
 						}
 
 						break;
 					case MU_COMMAND_CLIP:
-						glScissor(cmd->clip.rect.x, settings.window_height - (cmd->clip.rect.y + cmd->clip.rect.h),
-								  cmd->clip.rect.w, cmd->clip.rect.h);
+						gfx_scissor(cmd->clip.rect.x, settings.window_height - (cmd->clip.rect.y + cmd->clip.rect.h),
+									cmd->clip.rect.w, cmd->clip.rect.h);
 						break;
 				}
 			}
-			glDisable(GL_BLEND);
-			glDisable(GL_SCISSOR_TEST);
+			gfx_blend(0);
+			gfx_scissor_off();
 		}
 	}
 
@@ -477,8 +473,6 @@ void display() {
 
 void init() {
 	map_init();
-
-	glx_init();
 
 	font_init();
 	player_init();
@@ -596,7 +590,7 @@ void keys(struct window_instance* window, int key, int scancode, int action, int
 
 		unsigned char* pic_data = malloc(settings.window_width * settings.window_height * 4 * 2);
 		CHECK_ALLOCATION_ERROR(pic_data)
-		glReadPixels(0, 0, settings.window_width, settings.window_height, GL_RGBA, GL_UNSIGNED_BYTE, pic_data);
+		gfx_capture_framebuffer(0, 0, settings.window_width, settings.window_height, pic_data);
 
 		for(int y = 0; y < settings.window_height; y++) { // mirror image (top-bottom)
 			for(int x = 0; x < settings.window_width; x++)

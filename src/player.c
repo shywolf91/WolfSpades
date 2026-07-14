@@ -644,8 +644,8 @@ void player_render(struct Player* p, int id) {
 		matrix_upload();
 
 		switch(p->team) {
-			case TEAM_1: glColor3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
-			case TEAM_2: glColor3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
+			case TEAM_1: gfx_color3ub(gamestate.team_1.red, gamestate.team_1.green, gamestate.team_1.blue); break;
+			case TEAM_2: gfx_color3ub(gamestate.team_2.red, gamestate.team_2.green, gamestate.team_2.blue); break;
 		}
 
 		font_select(FONT_FIXEDSYS);

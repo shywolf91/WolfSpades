@@ -119,13 +119,51 @@ void gfx_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type);
 void gfx_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, const void* color,
 					 const void* normal);
 
-/* Collapsing-structure depth pre-pass (color-mask around double mesh draw). */
+/* Collapsing-structure / netstat depth pre-pass (exact color-mask passthrough). */
 void gfx_color_mask(int r, int g, int b, int a);
 
-/* Current color (kv6 point tint). */
+/* Current color (CPU-tracked for shadow get/restore). */
 void gfx_color3f(float r, float g, float b);
 void gfx_color3ub(unsigned char r, unsigned char g, unsigned char b);
+void gfx_color4f(float r, float g, float b, float a);
+void gfx_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
+void gfx_get_color4f(float out[4]);
 void gfx_multisample(int enabled);
+void gfx_line_width(float w);
+
+/* Immediate 2D lines (xy pairs) / 3D short-vertex lines (block outline). */
+void gfx_draw_lines_2f(const float* xy_pairs, int vertex_count);
+void gfx_draw_lines_3s(const short* xyz, int vertex_count);
+
+/* First-person weapon near-slice (exact 0..0.05 / 0..1). */
+void gfx_depth_range_weapon(void);
+void gfx_depth_range_reset(void);
+
+void gfx_depth_test(int enabled);
+void gfx_depth_func_notequal(void);
+void gfx_depth_func_lequal(void);
+
+void gfx_scissor(int x, int y, int w, int h);
+void gfx_scissor_off(void);
+
+void gfx_viewport(int x, int y, int w, int h);
+
+void gfx_clear_color(float r, float g, float b, float a);
+void gfx_clear(void); /* color + depth */
+void gfx_clear_color_only(void);
+
+void gfx_shade_smooth(void);
+void gfx_shade_flat(void);
+void gfx_light0_position(const float pos4[4]);
+
+/*
+ * Screenshot readback: RGBA8 unsigned bytes into out_rgba.
+ * Caller owns row flip / alpha fill (main.c). Not Vulkan-ready.
+ */
+void gfx_capture_framebuffer(int x, int y, int w, int h, void* out_rgba);
+
+/* Desktop major>=2 capability flag (VBO / shader path); 0 on ES. */
+int gfx_gl2(void);
 
 /* --- kv6 model lighting / mesh combine / point sprites --- */
 void gfx_model_light(const float ambient4[4], const float diffuse4[4]);

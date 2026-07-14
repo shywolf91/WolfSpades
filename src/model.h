@@ -24,7 +24,7 @@
 #include <stdbool.h>
 
 #include "aabb.h"
-#include "glx.h"
+#include "gfx.h"
 #include "tesselator.h"
 
 #define KV6_VIS_NEG_X (1 << 0)
@@ -44,7 +44,7 @@ struct kv6_t {
 	uint16_t xsiz, ysiz, zsiz;
 	float xpiv, ypiv, zpiv;
 	bool has_display_list, colorize;
-	glx_displaylist display_list[2];
+	gfx_mesh_t display_list[2];
 	struct kv6_voxel* voxels;
 	int voxel_count;
 	float scale;

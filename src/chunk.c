@@ -105,11 +105,11 @@ void chunk_render(struct chunk_render_call* c) {
 		matrix_translate(matrix_model, c->mirror_x * map_size_x, 0.0F, c->mirror_y * map_size_z);
 		matrix_upload();
 
-		// glPolygonMode(GL_FRONT, GL_LINE);
+		/* wireframe draw (disabled) */
 
 		gfx_mesh_draw(&c->chunk->display_list, GFX_MESH_SHORT);
 
-		// glPolygonMode(GL_FRONT, GL_FILL);
+		/* solid fill restore (disabled) */
 
 		matrix_pop(matrix_model);
 	}
