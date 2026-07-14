@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 
-#include "glx.h"
+#include "gfx.h"
 
 #ifdef OPENGL_ES
 #define TESSELATE_TRIANGLES
@@ -60,7 +60,7 @@ void tesselator_create(struct tesselator* t, enum tesselator_vertex_type type, i
 void tesselator_clear(struct tesselator* t);
 void tesselator_free(struct tesselator* t);
 void tesselator_draw(struct tesselator* t, int with_color);
-void tesselator_glx(struct tesselator* t, struct glx_displaylist* x);
+void tesselator_gfx(struct tesselator* t, gfx_mesh_t* m);
 void tesselator_set_color(struct tesselator* t, uint32_t color);
 void tesselator_set_normal(struct tesselator* t, int8_t x, int8_t y, int8_t z);
 void tesselator_addi(struct tesselator* t, int16_t* coords, uint32_t* colors, int8_t* normals);

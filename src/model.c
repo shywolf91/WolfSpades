@@ -405,8 +405,8 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 				}
 			}
 
-			tesselator_glx(&tess_color, kv6->display_list + 0);
-			tesselator_glx(&tess_team, kv6->display_list + 1);
+			tesselator_gfx(&tess_color, kv6->display_list + 0);
+			tesselator_gfx(&tess_team, kv6->display_list + 1);
 
 			tesselator_free(&tess_color);
 			tesselator_free(&tess_team);

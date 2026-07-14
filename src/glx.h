@@ -24,23 +24,20 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+
+#include "gfx.h"
 
 extern int glx_version;
 extern int glx_fog;
 
-struct glx_displaylist {
-	uint32_t legacy;
-	uint32_t modern;
-	size_t size;
-	size_t buffer_size;
-	bool has_normal;
-	bool has_color;
-};
+/* Compat alias for model.c until step 5 converts kv6 to gfx_mesh_*. */
+typedef gfx_mesh_t glx_displaylist;
 
 enum {
-	GLX_DISPLAYLIST_NORMAL,
-	GLX_DISPLAYLIST_ENHANCED,
-	GLX_DISPLAYLIST_POINTS,
+	GLX_DISPLAYLIST_NORMAL = GFX_MESH_SHORT,
+	GLX_DISPLAYLIST_ENHANCED = GFX_MESH_FLOAT,
+	GLX_DISPLAYLIST_POINTS = GFX_MESH_POINTS,
 };
 
 void glx_init(void);
@@ -50,9 +47,9 @@ int glx_shader(const char* vertex, const char* fragment);
 void glx_enable_sphericalfog(void);
 void glx_disable_sphericalfog(void);
 
-void glx_displaylist_create(struct glx_displaylist* x, bool has_color, bool has_normal);
-void glx_displaylist_destroy(struct glx_displaylist* x);
-void glx_displaylist_update(struct glx_displaylist* x, size_t size, int type, void* color, void* vertex, void* normal);
-void glx_displaylist_draw(struct glx_displaylist* x, int type);
+void glx_displaylist_create(glx_displaylist* x, bool has_color, bool has_normal);
+void glx_displaylist_destroy(glx_displaylist* x);
+void glx_displaylist_update(glx_displaylist* x, size_t size, int type, void* color, void* vertex, void* normal);
+void glx_displaylist_draw(glx_displaylist* x, int type);
 
 #endif

@@ -23,6 +23,7 @@
 #include "config.h"
 #include "log.h"
 #include "gfx.h"
+#include "glx.h"
 
 static void* gfx_window;
 
@@ -266,6 +267,191 @@ void gfx_draw_quads_2d_short(const short* xy, const short* uv, int vertex_count)
 	glDrawArrays(GL_TRIANGLES, 0, vertex_count);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 	glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void gfx_mesh_create(gfx_mesh_t* m, int has_color, int has_normal) {
+	m->has_color = has_color;
+	m->has_normal = has_normal;
+
+#ifndef OPENGL_ES
+	if(!glx_version || settings.force_displaylist) {
+		m->legacy = glGenLists(1);
+	} else {
+		glGenBuffers(1, &m->modern);
+	}
+#else
+	glGenBuffers(1, &m->modern);
+#endif
+	m->buffer_size = 0;
+}
+
+void gfx_mesh_destroy(gfx_mesh_t* m) {
+#ifndef OPENGL_ES
+	if(!glx_version || settings.force_displaylist) {
+		glDeleteLists(m->legacy, 1);
+	} else {
+		glDeleteBuffers(1, &m->modern);
+	}
+#else
+	glDeleteBuffers(1, &m->modern);
+#endif
+}
+
+void gfx_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const void* color, const void* vertex,
+					 const void* normal) {
+	int grow_buffer = count > m->buffer_size;
+	m->buffer_size = max(m->buffer_size, count);
+	m->size = count;
+
+#ifndef OPENGL_ES
+	if(!glx_version || settings.force_displaylist) {
+		glEnableClientState(GL_VERTEX_ARRAY);
+		if(m->has_color)
+			glEnableClientState(GL_COLOR_ARRAY);
+		if(m->has_normal)
+			glEnableClientState(GL_NORMAL_ARRAY);
+
+		glNewList(m->legacy, GL_COMPILE);
+		if(count > 0) {
+			if(m->has_color)
+				glColorPointer(4, GL_UNSIGNED_BYTE, 0, color);
+
+			switch(type) {
+				case GFX_MESH_SHORT: glVertexPointer(3, GL_SHORT, 0, vertex); break;
+				case GFX_MESH_POINTS:
+				case GFX_MESH_FLOAT: glVertexPointer(3, GL_FLOAT, 0, vertex); break;
+			}
+
+			if(m->has_normal)
+				glNormalPointer(GL_BYTE, 0, normal);
+			glDrawArrays((type == GFX_MESH_POINTS) ? GL_POINTS : GL_QUADS, 0, m->size);
+		}
+		glEndList();
+
+		glDisableClientState(GL_VERTEX_ARRAY);
+		if(m->has_color)
+			glDisableClientState(GL_COLOR_ARRAY);
+		if(m->has_normal)
+			glDisableClientState(GL_NORMAL_ARRAY);
+	} else {
+#endif
+		size_t len_vertex = ((type == GFX_MESH_SHORT) ? sizeof(GLshort) : sizeof(GLfloat)) * 3;
+		size_t len_color = m->has_color ? (sizeof(GLubyte) * 4) : 0;
+		size_t len_normal = m->has_normal ? (sizeof(GLbyte) * 3) : 0;
+
+		glBindBuffer(GL_ARRAY_BUFFER, m->modern);
+
+		if(grow_buffer) {
+			glBufferData(GL_ARRAY_BUFFER, m->size * (len_vertex + len_color + len_normal), NULL, GL_STATIC_DRAW);
+		}
+
+		glBufferSubData(GL_ARRAY_BUFFER, 0, m->size * len_vertex, vertex);
+
+		if(m->has_color) {
+			glBufferSubData(GL_ARRAY_BUFFER, m->size * len_vertex, m->size * len_color, color);
+		}
+
+		if(m->has_normal) {
+			glBufferSubData(GL_ARRAY_BUFFER, m->size * (len_vertex + len_color), m->size * len_normal, normal);
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+#ifndef OPENGL_ES
+	}
+#endif
+}
+
+void gfx_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type) {
+#ifndef OPENGL_ES
+	if(!glx_version || settings.force_displaylist) {
+		glCallList(m->legacy);
+	} else {
+#endif
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glBindBuffer(GL_ARRAY_BUFFER, m->modern);
+
+		size_t len_vertex = ((type == GFX_MESH_SHORT) ? sizeof(GLshort) : sizeof(GLfloat)) * 3;
+		size_t len_color = m->has_color ? (sizeof(GLubyte) * 4) : 0;
+		size_t len_normal = m->has_normal ? (sizeof(GLbyte) * 3) : 0;
+
+		switch(type) {
+			case GFX_MESH_SHORT: glVertexPointer(3, GL_SHORT, 0, NULL); break;
+			case GFX_MESH_POINTS:
+			case GFX_MESH_FLOAT: glVertexPointer(3, GL_FLOAT, 0, NULL); break;
+		}
+
+		if(m->has_color) {
+			glEnableClientState(GL_COLOR_ARRAY);
+			glColorPointer(4, GL_UNSIGNED_BYTE, 0, (const void*)(m->size * len_vertex));
+		}
+
+		if(m->has_normal) {
+			glEnableClientState(GL_NORMAL_ARRAY);
+			glNormalPointer(GL_BYTE, 0, (const void*)(m->size * (len_vertex + len_color)));
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		if(type == GFX_MESH_POINTS) {
+			glDrawArrays(GL_POINTS, 0, m->size);
+		} else {
+#ifdef OPENGL_ES
+			glDrawArrays(GL_TRIANGLES, 0, m->size);
+#else
+			glDrawArrays(GL_QUADS, 0, m->size);
+#endif
+		}
+
+		if(m->has_normal)
+			glDisableClientState(GL_NORMAL_ARRAY);
+		if(m->has_color)
+			glDisableClientState(GL_COLOR_ARRAY);
+		glDisableClientState(GL_VERTEX_ARRAY);
+#ifndef OPENGL_ES
+	}
+#endif
+}
+
+void gfx_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, const void* color, const void* normal) {
+	glEnableClientState(GL_VERTEX_ARRAY);
+
+	if(normal) {
+		glEnableClientState(GL_NORMAL_ARRAY);
+		glNormalPointer(GL_BYTE, 0, normal);
+	}
+
+	switch(type) {
+		case GFX_MESH_SHORT: glVertexPointer(3, GL_SHORT, 0, vertex); break;
+		case GFX_MESH_POINTS:
+		case GFX_MESH_FLOAT: glVertexPointer(3, GL_FLOAT, 0, vertex); break;
+	}
+
+	if(color) {
+		glEnableClientState(GL_COLOR_ARRAY);
+		glColorPointer(4, GL_UNSIGNED_BYTE, 0, color);
+	}
+
+	if(type == GFX_MESH_POINTS) {
+		glDrawArrays(GL_POINTS, 0, count);
+	} else {
+#ifdef OPENGL_ES
+		glDrawArrays(GL_TRIANGLES, 0, count);
+#else
+		glDrawArrays(GL_QUADS, 0, count);
+#endif
+	}
+
+	if(color)
+		glDisableClientState(GL_COLOR_ARRAY);
+
+	glDisableClientState(GL_VERTEX_ARRAY);
+
+	if(normal)
+		glDisableClientState(GL_NORMAL_ARRAY);
+}
+
+void gfx_color_mask(int r, int g, int b, int a) {
+	glColorMask(r ? GL_TRUE : GL_FALSE, g ? GL_TRUE : GL_FALSE, b ? GL_TRUE : GL_FALSE, a ? GL_TRUE : GL_FALSE);
 }
 
 void gfx_pass_begin(gfx_pass_t pass) {

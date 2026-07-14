@@ -77,146 +77,20 @@ int glx_shader(const char* vertex, const char* fragment) {
 #endif
 }
 
-void glx_displaylist_create(struct glx_displaylist* x, bool has_color, bool has_normal) {
-	x->has_color = has_color;
-	x->has_normal = has_normal;
-
-#ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
-		x->legacy = glGenLists(1);
-	} else {
-		glGenBuffers(1, &x->modern);
-	}
-#else
-	glGenBuffers(1, &x->modern);
-#endif
-	x->buffer_size = 0;
+void glx_displaylist_create(glx_displaylist* x, bool has_color, bool has_normal) {
+	gfx_mesh_create(x, has_color, has_normal);
 }
 
-void glx_displaylist_destroy(struct glx_displaylist* x) {
-#ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
-		glDeleteLists(x->legacy, 1);
-	} else {
-		glDeleteBuffers(1, &x->modern);
-	}
-#else
-	glDeleteBuffers(1, &x->modern);
-#endif
+void glx_displaylist_destroy(glx_displaylist* x) {
+	gfx_mesh_destroy(x);
 }
 
-void glx_displaylist_update(struct glx_displaylist* x, size_t size, int type, void* color, void* vertex, void* normal) {
-	int grow_buffer = size > x->buffer_size;
-	x->buffer_size = max(x->buffer_size, size);
-	x->size = size;
-
-#ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
-		glEnableClientState(GL_VERTEX_ARRAY);
-		if(x->has_color)
-			glEnableClientState(GL_COLOR_ARRAY);
-		if(x->has_normal)
-			glEnableClientState(GL_NORMAL_ARRAY);
-
-		glNewList(x->legacy, GL_COMPILE);
-		if(size > 0) {
-			if(x->has_color)
-				glColorPointer(4, GL_UNSIGNED_BYTE, 0, color);
-
-			switch(type) {
-				case GLX_DISPLAYLIST_NORMAL: glVertexPointer(3, GL_SHORT, 0, vertex); break;
-				case GLX_DISPLAYLIST_POINTS:
-				case GLX_DISPLAYLIST_ENHANCED: glVertexPointer(3, GL_FLOAT, 0, vertex); break;
-			}
-
-			if(x->has_normal)
-				glNormalPointer(GL_BYTE, 0, normal);
-			glDrawArrays((type == GLX_DISPLAYLIST_POINTS) ? GL_POINTS : GL_QUADS, 0, x->size);
-		}
-		glEndList();
-
-		glDisableClientState(GL_VERTEX_ARRAY);
-		if(x->has_color)
-			glDisableClientState(GL_COLOR_ARRAY);
-		if(x->has_normal)
-			glDisableClientState(GL_NORMAL_ARRAY);
-	} else {
-#endif
-		size_t len_vertex = ((type == GLX_DISPLAYLIST_NORMAL) ? sizeof(GLshort) : sizeof(GLfloat)) * 3;
-		size_t len_color = x->has_color ? (sizeof(GLubyte) * 4) : 0;
-		size_t len_normal = x->has_normal ? (sizeof(GLbyte) * 3) : 0;
-
-		glBindBuffer(GL_ARRAY_BUFFER, x->modern);
-
-		if(grow_buffer) {
-			glBufferData(GL_ARRAY_BUFFER, x->size * (len_vertex + len_color + len_normal), NULL, GL_STATIC_DRAW);
-		}
-
-		glBufferSubData(GL_ARRAY_BUFFER, 0, x->size * len_vertex, vertex);
-
-		if(x->has_color) {
-			glBufferSubData(GL_ARRAY_BUFFER, x->size * len_vertex, x->size * len_color, color);
-		}
-
-		if(x->has_normal) {
-			glBufferSubData(GL_ARRAY_BUFFER, x->size * (len_vertex + len_color), x->size * len_normal, normal);
-		}
-
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-#ifndef OPENGL_ES
-	}
-#endif
+void glx_displaylist_update(glx_displaylist* x, size_t size, int type, void* color, void* vertex, void* normal) {
+	gfx_mesh_update(x, size, (gfx_mesh_type_t)type, color, vertex, normal);
 }
 
-void glx_displaylist_draw(struct glx_displaylist* x, int type) {
-#ifndef OPENGL_ES
-	if(!glx_version || settings.force_displaylist) {
-		glCallList(x->legacy);
-	} else {
-#endif
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glBindBuffer(GL_ARRAY_BUFFER, x->modern);
-
-		size_t len_vertex = ((type == GLX_DISPLAYLIST_NORMAL) ? sizeof(GLshort) : sizeof(GLfloat)) * 3;
-		size_t len_color = x->has_color ? (sizeof(GLubyte) * 4) : 0;
-		size_t len_normal = x->has_normal ? (sizeof(GLbyte) * 3) : 0;
-
-		switch(type) {
-			case GLX_DISPLAYLIST_NORMAL: glVertexPointer(3, GL_SHORT, 0, NULL); break;
-			case GLX_DISPLAYLIST_POINTS:
-			case GLX_DISPLAYLIST_ENHANCED: glVertexPointer(3, GL_FLOAT, 0, NULL); break;
-		}
-
-		if(x->has_color) {
-			glEnableClientState(GL_COLOR_ARRAY);
-			glColorPointer(4, GL_UNSIGNED_BYTE, 0, (const void*)(x->size * len_vertex));
-		}
-
-		if(x->has_normal) {
-			glEnableClientState(GL_NORMAL_ARRAY);
-			glNormalPointer(GL_BYTE, 0, (const void*)(x->size * (len_vertex + len_color)));
-		}
-
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-		if(type == GLX_DISPLAYLIST_POINTS) {
-			glDrawArrays(GL_POINTS, 0, x->size);
-		} else {
-#ifdef OPENGL_ES
-			glDrawArrays(GL_TRIANGLES, 0, x->size);
-#else
-		glDrawArrays(GL_QUADS, 0, x->size);
-#endif
-		}
-
-		if(x->has_normal)
-			glDisableClientState(GL_NORMAL_ARRAY);
-		if(x->has_color)
-			glDisableClientState(GL_COLOR_ARRAY);
-		glDisableClientState(GL_VERTEX_ARRAY);
-#ifndef OPENGL_ES
-	}
-#endif
+void glx_displaylist_draw(glx_displaylist* x, int type) {
+	gfx_mesh_draw(x, (gfx_mesh_type_t)type);
 }
 
 void glx_enable_sphericalfog() {

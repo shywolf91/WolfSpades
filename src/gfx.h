@@ -20,6 +20,7 @@
 #ifndef GFX_H
 #define GFX_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 void gfx_apply_context_hints(void);
@@ -84,5 +85,41 @@ void gfx_blend(int enabled); /* SRC_ALPHA / ONE_MINUS_SRC_ALPHA when on */
 /* Client-array textured tris; vertex_count is draw vertex count (e.g. 6). */
 void gfx_draw_quads_2d(const float* xy, const float* uv, int vertex_count);
 void gfx_draw_quads_2d_short(const short* xy, const short* uv, int vertex_count);
+
+/*
+ * Persistent mesh (former display-list wrapper). Embeddable; fields are backend-owned.
+ * Storage is display-list or VBO exactly as before — no promotion.
+ */
+typedef struct gfx_mesh {
+	uint32_t legacy;
+	uint32_t modern;
+	size_t size;
+	size_t buffer_size;
+	int has_color;
+	int has_normal;
+} gfx_mesh_t;
+
+/* Vertex format + primitive selector (mirrors prior NORMAL / ENHANCED / POINTS). */
+typedef enum {
+	GFX_MESH_SHORT = 0, /* short3 positions; quads/tris */
+	GFX_MESH_FLOAT = 1, /* float3 positions; quads/tris */
+	GFX_MESH_POINTS = 2, /* float3 positions; points */
+} gfx_mesh_type_t;
+
+void gfx_mesh_create(gfx_mesh_t* m, int has_color, int has_normal);
+void gfx_mesh_destroy(gfx_mesh_t* m);
+void gfx_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const void* color,
+					 const void* vertex, const void* normal);
+void gfx_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type);
+
+/*
+ * Transient client-array draw (tesselator_draw). color/normal may be NULL to skip
+ * those arrays. Primitive follows mesh type (POINTS vs quads/tris).
+ */
+void gfx_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, const void* color,
+					 const void* normal);
+
+/* Collapsing-structure depth pre-pass (color-mask around double mesh draw). */
+void gfx_color_mask(int r, int g, int b, int a);
 
 #endif

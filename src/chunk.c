@@ -107,7 +107,7 @@ void chunk_render(struct chunk_render_call* c) {
 
 		// glPolygonMode(GL_FRONT, GL_LINE);
 
-		glx_displaylist_draw(&c->chunk->display_list, GLX_DISPLAYLIST_NORMAL);
+		gfx_mesh_draw(&c->chunk->display_list, GFX_MESH_SHORT);
 
 		// glPolygonMode(GL_FRONT, GL_FILL);
 
@@ -786,13 +786,13 @@ void chunk_update_all() {
 				result->chunk->updated = true;
 
 				if(!result->chunk->created) {
-					glx_displaylist_create(&result->chunk->display_list, true, false);
+					gfx_mesh_create(&result->chunk->display_list, 1, 0);
 					result->chunk->created = true;
 				}
 
 				result->chunk->max_height = result->max_height;
 
-				tesselator_glx(&result->tesselator, &result->chunk->display_list);
+				tesselator_gfx(&result->tesselator, &result->chunk->display_list);
 
 				gfx_texture_update_sub_rgba((gfx_texture_t)texture_minimap.texture_id,
 											result->chunk->x * CHUNK_SIZE, result->chunk->y * CHUNK_SIZE, CHUNK_SIZE,

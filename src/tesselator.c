@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "tesselator.h"
+#include "gfx.h"
 
 static size_t vertex_type_size(enum tesselator_vertex_type type) {
 	switch(type) {
@@ -91,50 +92,25 @@ void tesselator_free(struct tesselator* t) {
 }
 
 void tesselator_draw(struct tesselator* t, int with_color) {
-	glEnableClientState(GL_VERTEX_ARRAY);
-
-	if(t->has_normal) {
-		glEnableClientState(GL_NORMAL_ARRAY);
-		glNormalPointer(GL_BYTE, 0, t->normals);
-	}
-
-	switch(t->vertex_type) {
-		case VERTEX_INT: glVertexPointer(3, GL_SHORT, 0, t->vertices); break;
-		case VERTEX_FLOAT: glVertexPointer(3, GL_FLOAT, 0, t->vertices); break;
-	}
-
-	if(with_color) {
-		glEnableClientState(GL_COLOR_ARRAY);
-		glColorPointer(4, GL_UNSIGNED_BYTE, 0, t->colors);
-	}
-
+	gfx_mesh_type_t type = (t->vertex_type == VERTEX_INT) ? GFX_MESH_SHORT : GFX_MESH_FLOAT;
+	size_t count;
 #ifdef TESSELATE_QUADS
-	glDrawArrays(GL_QUADS, 0, t->quad_count * 4);
+	count = t->quad_count * 4;
 #endif
-
 #ifdef TESSELATE_TRIANGLES
-	glDrawArrays(GL_TRIANGLES, 0, t->quad_count * 6);
+	count = t->quad_count * 6;
 #endif
-
-	if(with_color) {
-		glDisableClientState(GL_COLOR_ARRAY);
-	}
-
-	glDisableClientState(GL_VERTEX_ARRAY);
-
-	if(t->has_normal) {
-		glDisableClientState(GL_NORMAL_ARRAY);
-	}
+	gfx_draw_arrays(type, count, t->vertices, with_color ? t->colors : NULL, t->has_normal ? t->normals : NULL);
 }
 
-void tesselator_glx(struct tesselator* t, struct glx_displaylist* x) {
+void tesselator_gfx(struct tesselator* t, gfx_mesh_t* m) {
 #ifdef TESSELATE_QUADS
 	switch(t->vertex_type) {
 		case VERTEX_INT:
-			glx_displaylist_update(x, t->quad_count * 4, GLX_DISPLAYLIST_NORMAL, t->colors, t->vertices, t->normals);
+			gfx_mesh_update(m, t->quad_count * 4, GFX_MESH_SHORT, t->colors, t->vertices, t->normals);
 			break;
 		case VERTEX_FLOAT:
-			glx_displaylist_update(x, t->quad_count * 4, GLX_DISPLAYLIST_ENHANCED, t->colors, t->vertices, t->normals);
+			gfx_mesh_update(m, t->quad_count * 4, GFX_MESH_FLOAT, t->colors, t->vertices, t->normals);
 			break;
 	}
 #endif
@@ -142,10 +118,10 @@ void tesselator_glx(struct tesselator* t, struct glx_displaylist* x) {
 #ifdef TESSELATE_TRIANGLES
 	switch(t->vertex_type) {
 		case VERTEX_INT:
-			glx_displaylist_update(x, t->quad_count * 6, GLX_DISPLAYLIST_NORMAL, t->colors, t->vertices, t->normals);
+			gfx_mesh_update(m, t->quad_count * 6, GFX_MESH_SHORT, t->colors, t->vertices, t->normals);
 			break;
 		case VERTEX_FLOAT:
-			glx_displaylist_update(x, t->quad_count * 6, GLX_DISPLAYLIST_ENHANCED, t->colors, t->vertices, t->normals);
+			gfx_mesh_update(m, t->quad_count * 6, GFX_MESH_FLOAT, t->colors, t->vertices, t->normals);
 			break;
 	}
 #endif

@@ -28,7 +28,6 @@
 #include "sound.h"
 #include "matrix.h"
 #include "gfx.h"
-#include "glx.h"
 #include "chunk.h"
 #include "common.h"
 #include "map.h"
@@ -162,7 +161,7 @@ struct map_collapsing {
 	struct Orientation o;
 	int voxel_count;
 	int rotation, has_displaylist;
-	struct glx_displaylist displaylist;
+	gfx_mesh_t displaylist;
 	struct tesselator mesh_geometry;
 };
 
@@ -328,15 +327,15 @@ static bool falling_blocks_render(void* obj, void* user) {
 
 	if(!collapsing->has_displaylist) {
 		collapsing->has_displaylist = 1;
-		glx_displaylist_create(&collapsing->displaylist, true, false);
-		tesselator_glx(&collapsing->mesh_geometry, &collapsing->displaylist);
+		gfx_mesh_create(&collapsing->displaylist, 1, 0);
+		tesselator_gfx(&collapsing->mesh_geometry, &collapsing->displaylist);
 		tesselator_free(&collapsing->mesh_geometry);
 	}
 
-	glColorMask(0, 0, 0, 0);
-	glx_displaylist_draw(&collapsing->displaylist, GLX_DISPLAYLIST_ENHANCED);
-	glColorMask(1, 1, 1, 1);
-	glx_displaylist_draw(&collapsing->displaylist, GLX_DISPLAYLIST_ENHANCED);
+	gfx_color_mask(0, 0, 0, 0);
+	gfx_mesh_draw(&collapsing->displaylist, GFX_MESH_FLOAT);
+	gfx_color_mask(1, 1, 1, 1);
+	gfx_mesh_draw(&collapsing->displaylist, GFX_MESH_FLOAT);
 
 	return false;
 }
@@ -411,7 +410,7 @@ static bool falling_blocks_update(void* obj, void* user) {
 			ht_destroy(&collapsing->voxels);
 
 			if(collapsing->has_displaylist) {
-				glx_displaylist_destroy(&collapsing->displaylist);
+				gfx_mesh_destroy(&collapsing->displaylist);
 			} else {
 				tesselator_free(&collapsing->mesh_geometry);
 			}

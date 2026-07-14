@@ -25,7 +25,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "glx.h"
+#include "gfx.h"
 #include "tesselator.h"
 #include "libvxl.h"
 
@@ -33,7 +33,7 @@
 #define CHUNKS_PER_DIM (512 / CHUNK_SIZE)
 
 extern struct chunk {
-	struct glx_displaylist display_list;
+	gfx_mesh_t display_list;
 	int max_height;
 	bool updated;
 	bool created;

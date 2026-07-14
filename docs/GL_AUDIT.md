@@ -461,3 +461,76 @@ Confirmed: no `GLuint`/`GLenum`/`GLFW` includes; public surface is `float*` + `g
 ### `gfx.h` GL-type leak check
 
 Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outside `gfx_` prefix is empty.
+
+---
+
+## Phase 1b progress — Step 4: meshes (displaylists + tesselator)
+
+**Date:** 2026-07-14  
+**Scope:** Move `glx_displaylist_*` submission and `tesselator_draw` client-array draws behind `gfx_mesh_*` / `gfx_draw_arrays`. Zero behavior change. No VBO promotion, no vertex-format / batching / draw-order changes. `model.c`/kv6 left on `glx_displaylist_*` wrappers (step 5).
+
+### API added
+
+| API | Role |
+|-----|------|
+| `typedef struct gfx_mesh { … } gfx_mesh_t` | Embeddable mesh handle (former `glx_displaylist` fields; no GL types). Completeness chosen over incomplete opaque type so chunks/collapsing can keep by-value storage. |
+| `gfx_mesh_type_t` | `GFX_MESH_SHORT` / `FLOAT` / `POINTS` — mirrors `GLX_DISPLAYLIST_NORMAL` / `ENHANCED` / `POINTS`. |
+| `gfx_mesh_create` / `destroy` / `update` / `draw` | Exact former display-list **or** VBO dual path (`glx_version` + `force_displaylist`). |
+| `gfx_draw_arrays` | Transient client-array path for `tesselator_draw` (color/normal pointers nullable). |
+| `gfx_color_mask` | Collapsing double-draw depth pre-pass (`glColorMask` around two `gfx_mesh_draw`s). |
+
+### Vertex layouts found
+
+| Type | Position | Optional attrs | Primitive |
+|------|----------|----------------|-----------|
+| `GFX_MESH_SHORT` | `short3` | `ubyte4` color, `byte3` normal | `GL_QUADS` / ES `GL_TRIANGLES` |
+| `GFX_MESH_FLOAT` | `float3` | same | same |
+| `GFX_MESH_POINTS` | `float3` | same | `GL_POINTS` (model / step 5) |
+
+### Mechanism preservation
+
+- Desktop + `!force_displaylist` + `glx_version`: VBO upload/draw unchanged (not converted to client arrays).
+- Desktop legacy / `force_displaylist`: `glNewList` / `glCallList` unchanged (not converted to VBOs or client arrays).
+- ES: VBO path unchanged.
+- `tesselator_draw`: remains immediate client arrays via `gfx_draw_arrays` (never a persistent mesh).
+
+### Per-file conversion counts
+
+| File | Before | Converted | Left for later |
+|------|-------:|----------:|----------------|
+| `glx.c` | displaylist create/update/draw/destroy (~40 GL) | body → `gfx_gl.c`; thin wrappers remain | fog + shader (step 5) |
+| `tesselator.c` | 1 draw + 4 update sites | all → `gfx_draw_arrays` / `gfx_mesh_update`; `tesselator_glx` → `tesselator_gfx` | — |
+| `chunk.c` / `chunk.h` | 1 create, 1 draw, 1 tess upload | all → `gfx_mesh_*` | — |
+| `map.c` | 1 create, 1 destroy, 2 draw, 1 tess draw, ColorMask pair | all → `gfx_*` | — |
+| `particle.c` | 1 `tesselator_draw` | via tesselator (no direct edit) | — |
+| `model.c` / `model.h` | 14 displaylist + 2 `tesselator_glx` | rename `tesselator_glx`→`tesselator_gfx` only; still `glx_displaylist_*` | full step 5 |
+
+### Sites left raw (justified)
+
+| Site | Why |
+|------|-----|
+| `model.c` `glx_displaylist_*` | Step 5 (kv6 mesh + point sprites + lighting/fog coupling). Wrappers call `gfx_mesh_*` already. |
+| `main.c` block-outline client arrays (`GL_LINES`) | Step 6 |
+| `hud.c` `glColorMask` (non-collapsing) | Step 6 |
+| `glx.c` fog / `glx_shader` | Step 5 |
+| Texture/font shadow color query leftovers | Step 6 (from step 3) |
+
+### `glx.c` non-draw utilities retained
+
+- `glx_init` / `glx_version`
+- `glx_fog` flag
+- `glx_shader`
+- `glx_enable_sphericalfog` / `glx_disable_sphericalfog`
+- Thin `glx_displaylist_*` → `gfx_mesh_*` (model.c until step 5)
+
+### Naming deviations vs §4 / step brief
+
+- `gfx_mesh_t` is an embeddable complete struct (same fields as old `glx_displaylist`), not an incomplete opaque type — needed for by-value chunk/collapsing storage without heap indirection.
+- Type enum uses `SHORT`/`FLOAT`/`POINTS` rather than embedding format in the mesh at create time — matches the existing create-flags + per-draw type parameter shape.
+- `gfx_draw_arrays` name (not `gfx_mesh_draw_immediate`) for the transient path.
+- `tesselator_glx` renamed to `tesselator_gfx` (takes `gfx_mesh_t*`).
+- `glx_displaylist` is a `typedef` alias of `gfx_mesh_t` for model.h until step 5.
+
+### `gfx.h` GL-type leak check
+
+Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outside `gfx_` prefix is empty.
