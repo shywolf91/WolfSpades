@@ -27,4 +27,20 @@ void gfx_resize(int w, int h);
 void gfx_swap_buffers(void);
 void gfx_set_vsync(int interval);
 
+/* CPU owns matrix math; gfx only uploads the final values. */
+void gfx_matrix_projection(const float* m16);
+void gfx_matrix_modelview(const float* view16, const float* model16);
+
+typedef enum {
+	GFX_PASS_WORLD_3D,		/* depth test on, depth range 0..1 */
+	GFX_PASS_BLOCK_OUTLINE, /* depth off, depth mask off */
+	GFX_PASS_DAMAGED,		/* depth EQUAL + blend */
+	GFX_PASS_COLLAPSING,	/* blend only */
+	GFX_PASS_NAMETAG,		/* alpha test + depth off */
+	GFX_PASS_UI_2D,			/* depth off, multisample off */
+} gfx_pass_t;
+
+void gfx_pass_begin(gfx_pass_t pass);
+void gfx_pass_end(gfx_pass_t pass);
+
 #endif

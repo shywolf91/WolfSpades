@@ -27,6 +27,7 @@
 #include "hashtable.h"
 #include "sound.h"
 #include "matrix.h"
+#include "gfx.h"
 #include "glx.h"
 #include "chunk.h"
 #include "common.h"
@@ -133,9 +134,7 @@ void map_damaged_voxels_render() {
 	matrix_upload();
 	// glEnable(GL_POLYGON_OFFSET_FILL);
 	// glPolygonOffset(0.0F,-100.0F);
-	glDepthFunc(GL_EQUAL);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	gfx_pass_begin(GFX_PASS_DAMAGED);
 
 	tesselator_clear(&map_damaged_tesselator);
 
@@ -143,8 +142,7 @@ void map_damaged_voxels_render() {
 
 	tesselator_draw(&map_damaged_tesselator, 1);
 
-	glDepthFunc(GL_LEQUAL);
-	glDisable(GL_BLEND);
+	gfx_pass_end(GFX_PASS_DAMAGED);
 	// glPolygonOffset(0.0F,0.0F);
 	// glDisable(GL_POLYGON_OFFSET_FILL);
 }
@@ -346,14 +344,13 @@ static bool falling_blocks_render(void* obj, void* user) {
 void map_collapsing_render() {
 	// qsort(map_collapsing_structures, 32, sizeof(struct map_collapsing), map_collapsing_cmp);
 
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	gfx_pass_begin(GFX_PASS_COLLAPSING);
 
 	matrix_push(matrix_model);
 	entitysys_iterate(&map_collapsing_structures, NULL, falling_blocks_render);
 	matrix_pop(matrix_model);
 
-	glDisable(GL_BLEND);
+	gfx_pass_end(GFX_PASS_COLLAPSING);
 }
 
 static bool falling_blocks_collision(void* key, void* value, void* user) {

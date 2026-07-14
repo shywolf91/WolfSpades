@@ -27,6 +27,7 @@
 #include "sound.h"
 #include "map.h"
 #include "matrix.h"
+#include "gfx.h"
 #include "model.h"
 #include "font.h"
 #include "cameracontroller.h"
@@ -648,12 +649,9 @@ void player_render(struct Player* p, int id) {
 		}
 
 		font_select(FONT_FIXEDSYS);
-		glEnable(GL_ALPHA_TEST);
-		glAlphaFunc(GL_GREATER, 0.5F);
-		glDisable(GL_DEPTH_TEST);
+		gfx_pass_begin(GFX_PASS_NAMETAG);
 		font_centered(0, 0, 64, p->name);
-		glEnable(GL_DEPTH_TEST);
-		glDisable(GL_ALPHA_TEST);
+		gfx_pass_end(GFX_PASS_NAMETAG);
 		matrix_pop(matrix_model);
 		matrix_upload();
 	}

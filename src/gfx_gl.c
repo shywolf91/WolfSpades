@@ -126,3 +126,71 @@ void gfx_set_vsync(int interval) {
 	SDL_GL_SetSwapInterval(interval);
 #endif
 }
+
+void gfx_matrix_projection(const float* m16) {
+	glMatrixMode(GL_PROJECTION);
+	glLoadMatrixf(m16);
+}
+
+void gfx_matrix_modelview(const float* view16, const float* model16) {
+	glMatrixMode(GL_MODELVIEW);
+	glLoadMatrixf(view16);
+	glMultMatrixf(model16);
+}
+
+void gfx_pass_begin(gfx_pass_t pass) {
+	switch(pass) {
+		case GFX_PASS_WORLD_3D:
+			glEnable(GL_DEPTH_TEST);
+			glDepthRange(0.0F, 1.0F);
+			break;
+		case GFX_PASS_BLOCK_OUTLINE:
+			glDisable(GL_DEPTH_TEST);
+			glDepthMask(GL_FALSE);
+			break;
+		case GFX_PASS_DAMAGED:
+			glDepthFunc(GL_EQUAL);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			break;
+		case GFX_PASS_COLLAPSING:
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			break;
+		case GFX_PASS_NAMETAG:
+			glEnable(GL_ALPHA_TEST);
+			glAlphaFunc(GL_GREATER, 0.5F);
+			glDisable(GL_DEPTH_TEST);
+			break;
+		case GFX_PASS_UI_2D:
+			glDisable(GL_DEPTH_TEST);
+			glDisable(GL_MULTISAMPLE);
+			break;
+	}
+}
+
+void gfx_pass_end(gfx_pass_t pass) {
+	switch(pass) {
+		case GFX_PASS_WORLD_3D:
+			break;
+		case GFX_PASS_BLOCK_OUTLINE:
+			glEnable(GL_DEPTH_TEST);
+			glDepthMask(GL_TRUE);
+			break;
+		case GFX_PASS_DAMAGED:
+			glDepthFunc(GL_LEQUAL);
+			glDisable(GL_BLEND);
+			break;
+		case GFX_PASS_COLLAPSING:
+			glDisable(GL_BLEND);
+			break;
+		case GFX_PASS_NAMETAG:
+			glEnable(GL_DEPTH_TEST);
+			glDisable(GL_ALPHA_TEST);
+			break;
+		case GFX_PASS_UI_2D:
+			if(settings.multisamples > 0)
+				glEnable(GL_MULTISAMPLE);
+			break;
+	}
+}

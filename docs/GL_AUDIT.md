@@ -334,3 +334,67 @@ Confirmed: no `GLuint`/`GLenum`/`GLFWwindow`, no `GL`/`glew` includes. Case-inse
 - Present via `gfx_swap_buffers()`; no `gfx_begin_frame`/`gfx_end_frame`/`gfx_clear` this step — per-frame clear is interleaved with depth/`chunk_update_all` and stays in `main.c`.
 - `gfx_set_vsync` matches the audit name; no backend vtable.
 
+---
+
+## Phase 1b progress — Step 2: matrices + state-pass bundles
+
+**Date:** 2026-07-14  
+**Scope:** Matrix upload + recurring enable/disable pass bundles only. Zero behavior change. No VBO promotion, no state rationalization.
+
+### Passes defined (`gfx_pass_t`)
+
+| Pass | `gfx_pass_begin` | `gfx_pass_end` |
+|------|------------------|----------------|
+| `GFX_PASS_WORLD_3D` | `glEnable(GL_DEPTH_TEST)`; `glDepthRange(0,1)` | (none — UI pass takes over) |
+| `GFX_PASS_BLOCK_OUTLINE` | `glDisable(GL_DEPTH_TEST)`; `glDepthMask(GL_FALSE)` | `glEnable(GL_DEPTH_TEST)`; `glDepthMask(GL_TRUE)` |
+| `GFX_PASS_DAMAGED` | `glDepthFunc(GL_EQUAL)`; blend on `SRC_ALPHA`/`ONE_MINUS_SRC_ALPHA` | `glDepthFunc(GL_LEQUAL)`; blend off |
+| `GFX_PASS_COLLAPSING` | blend on (same func) | blend off |
+| `GFX_PASS_NAMETAG` | `glEnable(GL_ALPHA_TEST)`; `glAlphaFunc(GL_GREATER, 0.5)`; depth off | depth on; alpha test off |
+| `GFX_PASS_UI_2D` | depth off; `glDisable(GL_MULTISAMPLE)` | re-enable MSAA if `settings.multisamples > 0` |
+
+`GFX_PASS_DAMAGED` and `GFX_PASS_COLLAPSING` intentionally kept separate (differ by depth-func).
+
+### Matrix API
+
+| API | GL sequence |
+|-----|-------------|
+| `gfx_matrix_projection(const float* m16)` | `glMatrixMode(GL_PROJECTION)`; `glLoadMatrixf` |
+| `gfx_matrix_modelview(const float* view16, const float* model16)` | `glMatrixMode(GL_MODELVIEW)`; `glLoadMatrixf(view)`; `glMultMatrixf(model)` |
+
+CPU matrix math stays in `matrix.c` / cglm. Upload sites only.
+
+### Call sites converted
+
+| File | Sites | Change |
+|------|------:|--------|
+| `matrix.c` | 2 | `matrix_upload` / `matrix_upload_p` → gfx matrix uploads |
+| `main.c` | 3 passes | world begin; block-outline begin/end; UI-2D begin/end |
+| `map.c` | 2 passes | damaged begin/end; collapsing begin/end |
+| `player.c` | 1 pass | nametag begin/end |
+
+### Sites left raw (and why)
+
+| Site | Why |
+|------|-----|
+| `font.c` texture-matrix scale (`glMatrixMode(GL_TEXTURE)` + `glLoadIdentity`/`glScalef`) | Font/2D draw internals — step 3 |
+| `texture.c` / `font.c` blend+`TEXTURE_2D` enable/disable around quads | Texture/font draw path — step 3 |
+| `model.c` lighting / normalize / point-size / MSAA around mesh|points | Models — step 5 |
+| `glx.c` spherical-fog enable/disable (texgen / light / fog) | Fog — step 5 |
+| `main.c` `glEnable`/`glDisable(GL_FOG)` in `drawScene` / after spherical fog | Fog — step 5 |
+| `main.c` microui replay (`BLEND`/`SCISSOR` + re-enable after font/icon) | Microui — step 6 |
+| `hud.c` blend wrappers (scoreboard / chat shadow / FPS box) | HUD leftovers — step 6 |
+| `hud.c` network-stats depth/`ColorMask`/`DepthFunc(NOTEQUAL)` outline | One-off HUD technique — step 6 |
+| `hud.c:169` / `main.c` FP weapon `glDepthRange(0, 0.05)` | One-off parameter toggle, not an enable/disable bundle |
+| `map.c` falling-block `glColorMask` double-draw | One-off draw technique interleaved with `glx_displaylist_draw` — step 4 |
+| `main.c` `glShadeModel` / `glClear*` / `glLightfv` | Not matrix/pass-bundle scope |
+
+### Naming deviations vs §4 / step brief
+
+- `gfx_matrix_modelview(view, model)` takes **two** matrices so the backend can keep exact `Load`+`Mult` (brief example showed a single pre-multiplied `m16`).
+- Enum/pass names are derived from actual bundles (`WORLD_3D`, `BLOCK_OUTLINE`, `DAMAGED`, `COLLAPSING`, `NAMETAG`, `UI_2D`) rather than the audit sketch (`WORLD` / `MODELS` / `OVERLAY_3D` / `UI_2D`).
+- API is `gfx_pass_begin` / `gfx_pass_end` (brief) rather than audit `gfx_begin_pass` / `gfx_end_pass`.
+- No `GFX_PASS_MODELS` — lighting stays in `model.c` until step 5.
+
+### `gfx.h` GL-type leak check
+
+Confirmed: no `GLuint`/`GLenum`/`GLFW` includes; public surface is `float*` + `gfx_pass_t` only.

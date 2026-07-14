@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "common.h"
+#include "gfx.h"
 #include "matrix.h"
 
 mat4 matrix_view;
@@ -117,12 +118,9 @@ void matrix_lookAt(mat4 m, double eyex, double eyey, double eyez, double centerx
 }
 
 void matrix_upload() {
-	glMatrixMode(GL_MODELVIEW);
-	glLoadMatrixf((float*)matrix_view);
-	glMultMatrixf((float*)matrix_model);
+	gfx_matrix_modelview((float*)matrix_view, (float*)matrix_model);
 }
 
 void matrix_upload_p() {
-	glMatrixMode(GL_PROJECTION);
-	glLoadMatrixf((float*)matrix_projection);
+	gfx_matrix_projection((float*)matrix_projection);
 }

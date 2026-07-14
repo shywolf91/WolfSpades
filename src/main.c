@@ -194,8 +194,7 @@ void display() {
 	}
 
 	if(hud_active->render_world) {
-		glEnable(GL_DEPTH_TEST);
-		glDepthRange(0.0F, 1.0F);
+		gfx_pass_begin(GFX_PASS_WORLD_3D);
 
 		chunk_update_all();
 
@@ -288,8 +287,7 @@ void display() {
 				matrix_upload();
 				glColor3f(1.0F, 0.0F, 0.0F);
 				glLineWidth(1.0F);
-				glDisable(GL_DEPTH_TEST);
-				glDepthMask(GL_FALSE);
+				gfx_pass_begin(GFX_PASS_BLOCK_OUTLINE);
 				struct Point cubes[64];
 				int amount = 0;
 				if(is_local && local_player_drag_active && players[local_player_id].input.buttons.rmb
@@ -347,8 +345,7 @@ void display() {
 					glDisableClientState(GL_VERTEX_ARRAY);
 					amount--;
 				}
-				glEnable(GL_DEPTH_TEST);
-				glDepthMask(GL_TRUE);
+				gfx_pass_end(GFX_PASS_BLOCK_OUTLINE);
 			}
 
 			if(window_time() - players[local_player_id].item_disabled < 0.3F) {
@@ -402,8 +399,7 @@ void display() {
 	if(hud_active->render_3D)
 		hud_active->render_3D();
 
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_MULTISAMPLE);
+	gfx_pass_begin(GFX_PASS_UI_2D);
 	matrix_identity(matrix_projection);
 	matrix_ortho(matrix_projection, 0.0F, settings.window_width, 0.0F, settings.window_height, -1.0F, 1.0F);
 	matrix_identity(matrix_view);
@@ -483,8 +479,7 @@ void display() {
 		}
 	}
 
-	if(settings.multisamples > 0)
-		glEnable(GL_MULTISAMPLE);
+	gfx_pass_end(GFX_PASS_UI_2D);
 }
 
 void init() {
