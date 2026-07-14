@@ -300,3 +300,37 @@ These need **no** per-file GL edits if the callees are wrapped first.
 | particles/tracers (direct) | — | 0 |
 | microui lib (direct) | — | 0 |
 | **Total** | | **~532** |
+
+---
+
+## Phase 1b progress — Step 1: context/lifecycle
+
+**Date:** 2026-07-14  
+**Scope:** Window/context lifecycle only. Zero behavior change.
+
+### Call sites moved into `gfx_gl.c`
+
+| Former site | Call(s) | New API |
+|-------------|---------|---------|
+| `window.c` (GLFW) | `GLFW_CONTEXT_VERSION_*`, ES client/EGL hints, `GLFW_SAMPLES`, `GLFW_COCOA_RETINA_FRAMEBUFFER` | `gfx_apply_context_hints()` |
+| `window.c` (SDL) | `SDL_GL_SetAttribute*` | `gfx_apply_context_hints()` |
+| `window.c` | `glfwMakeContextCurrent` / `SDL_GL_CreateContext` | `gfx_init(window)` |
+| `main.c` | `glewInit`, `glGetString` vendor logs, one-shot MSAA enable, `glGetError` drain | `gfx_init(window)` |
+| `main.c` `init()` | depth/cull/hint/`glClearDepth`/`GL_LEQUAL`/smooth/`glDisable(GL_FOG)` | `gfx_init(window)` |
+| `main.c` `reshape` | `glViewport` | `gfx_resize(w, h)` |
+| `window.c` | `glfwSwapBuffers` / `SDL_GL_SwapWindow` | `gfx_swap_buffers()` |
+| `window.c` | `glfwSwapInterval` / `SDL_GL_SetSwapInterval` | `gfx_set_vsync(interval)` via `window_swapping` |
+
+**Left in place:** `glfwCreateWindow` / `SDL_CreateWindow`, input/chrome, per-frame `glClearColor`/`glClear` in `display()`, toggled `glEnable`/`glDisable`, `glx_init()` / rest of `glx.c`.
+
+### `gfx.h` GL-type leak check
+
+Confirmed: no `GLuint`/`GLenum`/`GLFWwindow`, no `GL`/`glew` includes. Case-insensitive search for `gl` outside the `gfx_` prefix is empty. Window is passed as `void*` (cast inside `gfx_gl.c`) so the public header stays API-agnostic.
+
+### API deviations vs §4 proposal
+
+- `gfx_init(void*)` after an already-created window (not `bool gfx_init(void)` that owns creation).
+- Added `gfx_apply_context_hints()` because hints must precede window create.
+- Present via `gfx_swap_buffers()`; no `gfx_begin_frame`/`gfx_end_frame`/`gfx_clear` this step — per-frame clear is interleaved with depth/`chunk_update_all` and stays in `main.c`.
+- `gfx_set_vsync` matches the audit name; no backend vtable.
+

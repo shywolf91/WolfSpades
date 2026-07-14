@@ -25,6 +25,7 @@
 #include "window.h"
 #include "config.h"
 #include "hud.h"
+#include "gfx.h"
 
 #ifdef OS_WINDOWS
 #include <sysinfoapi.h>
@@ -163,7 +164,7 @@ void window_mouseloc(double* x, double* y) {
 }
 
 void window_swapping(int value) {
-	glfwSwapInterval(value);
+	gfx_set_vsync(value);
 }
 
 void window_title(char* suffix) {
@@ -181,12 +182,7 @@ void window_init() {
 	hud_window = &i;
 
 	glfwWindowHint(GLFW_VISIBLE, 0);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-#ifdef OPENGL_ES
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-	glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
-#endif
+	gfx_apply_context_hints();
 
 	glfwSetErrorCallback(window_impl_error);
 
@@ -197,16 +193,7 @@ void window_init() {
 
 	glfwSetJoystickCallback(window_impl_joystick);
 
-	if(settings.multisamples > 0) {
-		glfwWindowHint(GLFW_SAMPLES, settings.multisamples);
-	}
-
-	/*
-	#FIXME: This is intended to fix the issue #145.
-	This is dirty because it disables the application-level Hi-DPI support for every installation
-	instead of being applied only to those who needs it.
-	*/
-	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+	gfx_apply_context_hints();
 
 	hud_window->impl
 		= glfwCreateWindow(settings.window_width, settings.window_height, "BetterSpades " BETTERSPADES_VERSION,
@@ -222,7 +209,7 @@ void window_init() {
 					 (mode->height - settings.window_height) / 2.0F);
 	glfwShowWindow(hud_window->impl);
 
-	glfwMakeContextCurrent(hud_window->impl);
+	gfx_init(hud_window->impl);
 
 	glfwSetFramebufferSizeCallback(hud_window->impl, window_impl_reshape);
 	glfwSetCursorPosCallback(hud_window->impl, window_impl_mouse);
@@ -236,7 +223,7 @@ void window_init() {
 }
 
 void window_fromsettings() {
-	glfwWindowHint(GLFW_SAMPLES, settings.multisamples);
+	gfx_apply_context_hints();
 	glfwSetWindowSize(hud_window->impl, settings.window_width, settings.window_height);
 
 	if(settings.vsync < 2)
@@ -282,7 +269,7 @@ static void gamepad_translate_button(GLFWgamepadstate* state, GLFWgamepadstate* 
 }
 
 void window_update() {
-	glfwSwapBuffers(hud_window->impl);
+	gfx_swap_buffers();
 	glfwPollEvents();
 
 	if(joystick_available && glfwJoystickIsGamepad(joystick_id)) {
@@ -391,7 +378,7 @@ void window_mouseloc(double* x, double* y) {
 }
 
 void window_swapping(int value) {
-	SDL_GL_SetSwapInterval(value);
+	gfx_set_vsync(value);
 }
 
 static struct window_finger fingers[8];
@@ -410,17 +397,8 @@ void window_init() {
 		= SDL_CreateWindow("BetterSpades " BETTERSPADES_VERSION, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 						   settings.window_width, settings.window_height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-#ifdef OPENGL_ES
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#endif
-	SDL_GLContext* ctx = SDL_GL_CreateContext(hud_window->impl);
+	gfx_apply_context_hints();
+	gfx_init(hud_window->impl);
 
 	memset(fingers, 0, sizeof(fingers));
 }
@@ -432,7 +410,7 @@ void window_deinit() {
 
 static int quit = 0;
 void window_update() {
-	SDL_GL_SwapWindow(hud_window->impl);
+	gfx_swap_buffers();
 	SDL_Event event;
 	while(SDL_PollEvent(&event)) {
 		switch(event.type) {

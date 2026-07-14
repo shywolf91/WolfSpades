@@ -46,6 +46,7 @@
 #include "texture.h"
 #include "chunk.h"
 #include "main.h"
+#include "gfx.h"
 
 int fps = 0;
 
@@ -487,20 +488,6 @@ void display() {
 }
 
 void init() {
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	glFrontFace(GL_CCW);
-#ifdef OPENGL_ES
-	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
-#else
-	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
-#endif
-	glClearDepth(1.0F);
-	glDepthFunc(GL_LEQUAL);
-	glShadeModel(GL_SMOOTH);
-	glDisable(GL_FOG);
-
 	map_init();
 
 	glx_init();
@@ -525,7 +512,7 @@ void init() {
 
 void reshape(struct window_instance* window, int width, int height) {
 	font_reset();
-	glViewport(0, 0, width, height);
+	gfx_resize(width, height);
 	settings.window_width = width;
 	settings.window_height = height;
 	if(settings.vsync < 2)
@@ -687,6 +674,7 @@ void deinit() {
 	ping_deinit();
 	if(network_connected)
 		network_disconnect();
+	gfx_shutdown();
 	window_deinit();
 }
 
@@ -745,23 +733,6 @@ int main(int argc, char** argv) {
 	config_reload();
 
 	window_init();
-
-#ifndef OPENGL_ES
-	if(glewInit())
-		log_error("Could not load extended OpenGL functions!");
-#endif
-
-	log_info("Vendor: %s", glGetString(GL_VENDOR));
-	log_info("Renderer: %s", glGetString(GL_RENDERER));
-	log_info("Version: %s", glGetString(GL_VERSION));
-
-	if(settings.multisamples > 0) {
-		glEnable(GL_MULTISAMPLE);
-		log_info("MSAAx%i on", settings.multisamples);
-	}
-
-	while(glGetError() != GL_NO_ERROR)
-		;
 
 	init();
 	atexit(deinit);
