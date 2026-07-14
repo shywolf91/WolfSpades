@@ -398,3 +398,66 @@ CPU matrix math stays in `matrix.c` / cglm. Upload sites only.
 ### `gfx.h` GL-type leak check
 
 Confirmed: no `GLuint`/`GLenum`/`GLFW` includes; public surface is `float*` + `gfx_pass_t` only.
+
+---
+
+## Phase 1b progress — Step 3: textures + 2D draw
+
+**Date:** 2026-07-14  
+**Scope:** Texture create/upload/bind/delete, NPOT/max-size queries, textured client-array 2D draws, font texture-matrix. Zero behavior change. No atlas restructure, no batching changes.
+
+### API added
+
+| API | Role |
+|-----|------|
+| `typedef uint32_t gfx_texture_t` | Opaque handle (stores backend id; 0 = none). Chosen over opaque struct for smaller diff vs existing `int`/`GLuint` storage. |
+| `gfx_filter_t` / `gfx_wrap_t` | `NEAREST`/`LINEAR`, `REPEAT`/`CLAMP` — differences kept per call site. |
+| `gfx_texture_create_rgba` | Gen + RGBA upload + **NEAREST min/mag + REPEAT** (matches `texture_create` / `create_buffer`). |
+| `gfx_texture_upload_rgba` | Re-upload existing handle; same NEAREST+REPEAT params (`create_buffer` `new==0`). |
+| `gfx_texture_create_alpha` | ALPHA atlas; **MIN_FILTER=LINEAR only** (matches font bake; MAG left at driver default). |
+| `gfx_texture_update_sub_rgba` | Bind + `TexSubImage2D` + unbind (minimap). |
+| `gfx_texture_set_filter` | Bind, set min+mag, unbind (matches `texture_filter`). |
+| `gfx_texture_set_filter_wrap_bound` | Filter+wrap on currently bound tex (font draw-time LINEAR+CLAMP). |
+| `gfx_texture_bind` / `gfx_texture_destroy` | Bind (0=unbind) / delete. |
+| `gfx_max_texture_size` / `gfx_supports_npot` | Replace `glGetIntegerv` / `GL_EXTENSIONS` scan. |
+| `gfx_texture_2d` / `gfx_blend` | Granular enables so texture vs font call order stays exact. |
+| `gfx_draw_quads_2d` / `gfx_draw_quads_2d_short` | Float (texture) and short (font) client-array tris; no layout change. |
+| `gfx_matrix_texture(sx, sy)` | `TEXTURE` mode: LoadIdentity + Scale; `(1,1)` resets (equiv. to prior LoadIdentity-only). |
+
+### Per-file conversion counts
+
+| File | Approx. GL sites before | Converted | Left raw |
+|------|------------------------:|----------:|---------:|
+| `texture.c` | ~70 | all create/filter/delete/draw/NPOT (~67) | 3 (`glGetFloatv` + 2× `glColor4f` in shadow) |
+| `font.c` | ~35 | all atlas/matrix/draw (~32) | 3 (`glGetFloatv` + 2× `glColor4f` in shadow) |
+| `chunk.c` | 3 (minimap subimage) | 3 | 0 (display-list calls remain — step 4) |
+
+### Sites left raw (and why)
+
+| Site | Why |
+|------|-----|
+| `texture_draw_shadow` / `font_render_shadow`: `glGetFloatv(GL_CURRENT_COLOR)` + matching `glColor4f` | Queries color set by **callers** (`hud.c` / `main.c` microui) via raw `glColor*`. Not last-write-wins through gfx; shadowing would be wrong until color sets move (step 6). |
+| `glx.c` fog unit-1 bind of `texture_gradient` | Fog — step 5 |
+| `model.c` bind of `texture_dummy` + `GL_COMBINE` | Models — step 5 |
+
+### Filtering / wrap confirmation (unchanged per site)
+
+| Site | Filter | Wrap |
+|------|--------|------|
+| `texture_create` / `texture_create_buffer` | NEAREST min+mag | REPEAT |
+| `texture_filter(..., NEAREST/LINEAR)` | both min+mag to that mode | (unchanged) |
+| Font bake (`gfx_texture_create_alpha`) | MIN=LINEAR only | (unset, as before) |
+| `font_render` draw path | LINEAR min+mag | CLAMP_TO_EDGE |
+| Minimap subimage | (no param change; upload only) | — |
+
+### Naming deviations vs §4 / step brief
+
+- Handle is `gfx_texture_t` (`uint32_t`), not opaque `struct gfx_texture`.
+- Separate `gfx_draw_quads_2d` (float) and `gfx_draw_quads_2d_short` rather than one typed entry — matches the two layouts in use.
+- `gfx_texture_2d` / `gfx_blend` instead of a combined begin/end, so font (texture → bind → params → blend) vs texture (texture → blend → bind) order is preserved.
+- `gfx_matrix_texture(sx, sy)` rather than a full `m16` upload — matches actual LoadIdentity+Scale usage.
+- No `gfx_get_color4f` this step (see raw sites).
+
+### `gfx.h` GL-type leak check
+
+Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outside `gfx_` prefix is empty.

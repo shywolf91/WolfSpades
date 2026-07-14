@@ -24,6 +24,7 @@
 #include "map.h"
 #include "log.h"
 #include "file.h"
+#include "gfx.h"
 
 #include "lodepng/lodepng.c"
 
@@ -109,18 +110,14 @@ void texture_flag_offset(int index, float* u, float* v) {
 }
 
 void texture_filter(struct texture* t, int filter) {
-	glBindTexture(GL_TEXTURE_2D, t->texture_id);
 	switch(filter) {
 		case TEXTURE_FILTER_NEAREST:
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			gfx_texture_set_filter((gfx_texture_t)t->texture_id, GFX_FILTER_NEAREST);
 			break;
 		case TEXTURE_FILTER_LINEAR:
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			gfx_texture_set_filter((gfx_texture_t)t->texture_id, GFX_FILTER_LINEAR);
 			break;
 	}
-	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 int texture_create(struct texture* t, char* filename) {
@@ -136,73 +133,54 @@ int texture_create(struct texture* t, char* filename) {
 
 	texture_resize_pow2(t, 0);
 
-	glGenTextures(1, &t->texture_id);
-	glBindTexture(GL_TEXTURE_2D, t->texture_id);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t->width, t->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, t->pixels);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	t->texture_id = (int)gfx_texture_create_rgba(t->width, t->height, t->pixels);
 }
 
 int texture_create_buffer(struct texture* t, int width, int height, unsigned char* buff, int new) {
-	if(new)
-		glGenTextures(1, &t->texture_id);
 	t->width = width;
 	t->height = height;
 	t->pixels = buff;
 	texture_resize_pow2(t, max(width, height));
 
-	glBindTexture(GL_TEXTURE_2D, t->texture_id);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t->width, t->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, t->pixels);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	if(new)
+		t->texture_id = (int)gfx_texture_create_rgba(t->width, t->height, t->pixels);
+	else
+		gfx_texture_upload_rgba((gfx_texture_t)t->texture_id, t->width, t->height, t->pixels);
 }
 
 void texture_delete(struct texture* t) {
 	if(t->pixels)
 		free(t->pixels);
-	glDeleteTextures(1, &t->texture_id);
+	gfx_texture_destroy((gfx_texture_t)t->texture_id);
 }
 
 void texture_draw_sector(struct texture* t, float x, float y, float w, float h, float u, float v, float us, float vs) {
-	glEnable(GL_TEXTURE_2D);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBindTexture(GL_TEXTURE_2D, t->texture_id);
+	gfx_texture_2d(1);
+	gfx_blend(1);
+	gfx_texture_bind((gfx_texture_t)t->texture_id);
 
 	float vertices[12] = {x, y, x, y - h, x + w, y - h, x, y, x + w, y - h, x + w, y};
 	float texcoords[12] = {u, v, u, v + vs, u + us, v + vs, u, v, u + us, v + vs, u + us, v};
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glTexCoordPointer(2, GL_FLOAT, 0, texcoords);
-	glVertexPointer(2, GL_FLOAT, 0, vertices);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	gfx_draw_quads_2d(vertices, texcoords, 6);
 
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glDisable(GL_BLEND);
-	glDisable(GL_TEXTURE_2D);
+	gfx_texture_bind(0);
+	gfx_blend(0);
+	gfx_texture_2d(0);
 }
 
 void texture_draw(struct texture* t, float x, float y, float w, float h) {
-	glEnable(GL_TEXTURE_2D);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBindTexture(GL_TEXTURE_2D, t->texture_id);
+	gfx_texture_2d(1);
+	gfx_blend(1);
+	gfx_texture_bind((gfx_texture_t)t->texture_id);
 	texture_draw_empty(x, y, w, h);
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glDisable(GL_BLEND);
-	glDisable(GL_TEXTURE_2D);
+	gfx_texture_bind(0);
+	gfx_blend(0);
+	gfx_texture_2d(0);
 }
 
 void texture_draw_shadow(struct texture* t, float x, float y, float w, float h) {
 	float color[4];
+	/* Color is set by callers (hud/main) via raw glColor*; not gfx last-write-wins. */
 	glGetFloatv(GL_CURRENT_COLOR, color);
 
 	glColor4f(0.F, 0.F, 0.F, 1.F);
@@ -214,26 +192,19 @@ void texture_draw_shadow(struct texture* t, float x, float y, float w, float h) 
 }
 
 void texture_draw_rotated(struct texture* t, float x, float y, float w, float h, float angle) {
-	glEnable(GL_TEXTURE_2D);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBindTexture(GL_TEXTURE_2D, t->texture_id);
+	gfx_texture_2d(1);
+	gfx_blend(1);
+	gfx_texture_bind((gfx_texture_t)t->texture_id);
 	texture_draw_empty_rotated(x, y, w, h, angle);
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glDisable(GL_BLEND);
-	glDisable(GL_TEXTURE_2D);
+	gfx_texture_bind(0);
+	gfx_blend(0);
+	gfx_texture_2d(0);
 }
 
 void texture_draw_empty(float x, float y, float w, float h) {
 	float vertices[12] = {x, y, x, y - h, x + w, y - h, x, y, x + w, y - h, x + w, y};
 	float texcoords[12] = {0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 0.0F};
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glTexCoordPointer(2, GL_FLOAT, 0, texcoords);
-	glVertexPointer(2, GL_FLOAT, 0, vertices);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	gfx_draw_quads_2d(vertices, texcoords, 6);
 }
 
 #define texture_emit_rotated(tx, ty, x, y, a) cos(a) * (x)-sin(a) * (y) + (tx), sin(a) * (x) + cos(a) * (y) + (ty)
@@ -244,24 +215,16 @@ void texture_draw_empty_rotated(float x, float y, float w, float h, float angle)
 		   texture_emit_rotated(x, y, w / 2, -h / 2, angle), texture_emit_rotated(x, y, -w / 2, h / 2, angle),
 		   texture_emit_rotated(x, y, w / 2, -h / 2, angle), texture_emit_rotated(x, y, w / 2, h / 2, angle)};
 	float texcoords[12] = {0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 0.0F};
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glTexCoordPointer(2, GL_FLOAT, 0, texcoords);
-	glVertexPointer(2, GL_FLOAT, 0, vertices);
-	glDrawArrays(GL_TRIANGLES, 0, 6);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	gfx_draw_quads_2d(vertices, texcoords, 6);
 }
 
 void texture_resize_pow2(struct texture* t, int min_size) {
 	if(!t->pixels)
 		return;
-	int max_size = 0;
-	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
-	max_size = max(max_size, min_size);
+	int max_size = max(gfx_max_texture_size(), min_size);
 
 	int w = 1, h = 1;
-	if(strstr(glGetString(GL_EXTENSIONS), "ARB_texture_non_power_of_two") != NULL) {
+	if(gfx_supports_npot()) {
 		if(t->width <= max_size && t->height <= max_size)
 			return;
 		w = t->width;

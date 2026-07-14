@@ -27,6 +27,7 @@
 #include "font.h"
 #include "stb_truetype.h"
 #include "utils.h"
+#include "gfx.h"
 
 #define FONT_BAKE_START 31
 
@@ -47,7 +48,7 @@ struct __attribute__((packed)) font_backed_id {
 
 struct font_backed_data {
 	stbtt_bakedchar* cdata;
-	GLuint texture_id;
+	gfx_texture_t texture_id;
 	int w, h;
 };
 
@@ -102,8 +103,7 @@ static struct font_backed_data* font_find(float h) {
 
 	void* temp_bitmap = NULL;
 
-	int max_size = 0;
-	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
+	int max_size = gfx_max_texture_size();
 
 	while(1) {
 		temp_bitmap = realloc(temp_bitmap, f.w * f.h);
@@ -120,11 +120,7 @@ static struct font_backed_data* font_find(float h) {
 
 	log_info("font texsize: %i:%ipx [size %f] type: %i", f.w, f.h, h, font_current_type);
 
-	glGenTextures(1, &f.texture_id);
-	glBindTexture(GL_TEXTURE_2D, f.texture_id);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, f.w, f.h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	f.texture_id = gfx_texture_create_alpha(f.w, f.h, temp_bitmap);
 
 	free(temp_bitmap);
 
@@ -159,7 +155,7 @@ float font_length(float h, char* text) {
 bool font_remove_callback(void* key, void* value, void* user) {
 	struct font_backed_data* f = (struct font_backed_data*)value;
 
-	glDeleteTextures(1, &f->texture_id);
+	gfx_texture_destroy(f->texture_id);
 	free(f->cdata);
 
 	return true;
@@ -220,39 +216,25 @@ void font_render(float x, float y, float h, char* text) {
 		text++;
 	}
 
-	glMatrixMode(GL_TEXTURE);
-	glLoadIdentity();
-	glScalef(1.0F / 8192.0F, 1.0F / 8192.0F, 1.0F);
-	glMatrixMode(GL_MODELVIEW);
+	gfx_matrix_texture(1.0F / 8192.0F, 1.0F / 8192.0F);
 
-	glEnable(GL_TEXTURE_2D);
-	glBindTexture(GL_TEXTURE_2D, font->texture_id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	gfx_texture_2d(1);
+	gfx_texture_bind(font->texture_id);
+	gfx_texture_set_filter_wrap_bound(GFX_FILTER_LINEAR, GFX_WRAP_CLAMP);
+	gfx_blend(1);
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glVertexPointer(2, GL_SHORT, 0, font_vertex_buffer);
-	glTexCoordPointer(2, GL_SHORT, 0, font_coords_buffer);
-	glDrawArrays(GL_TRIANGLES, 0, k / 2);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	gfx_draw_quads_2d_short(font_vertex_buffer, font_coords_buffer, k / 2);
 
-	glDisable(GL_BLEND);
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glDisable(GL_TEXTURE_2D);
+	gfx_blend(0);
+	gfx_texture_bind(0);
+	gfx_texture_2d(0);
 
-	glMatrixMode(GL_TEXTURE);
-	glLoadIdentity();
-	glMatrixMode(GL_MODELVIEW);
+	gfx_matrix_texture(1.0F, 1.0F);
 }
 
 void font_render_shadow(float x, float y, float h, char* text, float a) {
 	float color[4];
+	/* Color is set by callers (hud/main) via raw glColor*; not gfx last-write-wins. */
 	glGetFloatv(GL_CURRENT_COLOR, color);
 
 	glColor4f(0.F, 0.F, 0.F, a);
