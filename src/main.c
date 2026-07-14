@@ -107,14 +107,7 @@ void drawScene() {
 	chunk_draw_visible();
 
 	if(settings.smooth_fog) {
-#ifdef OPENGL_ES
-		glFogx(GL_FOG_MODE, GL_EXP2);
-#else
-		glFogi(GL_FOG_MODE, GL_EXP2);
-#endif
-		glFogf(GL_FOG_DENSITY, 0.015F);
-		glFogfv(GL_FOG_COLOR, fog_color);
-		glEnable(GL_FOG);
+		gfx_fog_enable_exp2(fog_color, 0.015F);
 	}
 
 	glShadeModel(GL_FLAT);
@@ -219,7 +212,7 @@ void display() {
 		camera_ExtractFrustum();
 
 		if(!network_map_transfer) {
-			glx_enable_sphericalfog();
+			gfx_fog_enable_spherical();
 			drawScene();
 
 			int render_fpv = (camera_mode == CAMERAMODE_FPS)
@@ -366,12 +359,12 @@ void display() {
 					matrix_upload_p();
 #ifdef OPENGL_ES
 					if(camera_mode == CAMERAMODE_FPS)
-						glx_disable_sphericalfog();
+						gfx_fog_disable_spherical();
 #endif
 					player_render(&players[local_player_id], local_player_id);
 #ifdef OPENGL_ES
 					if(camera_mode == CAMERAMODE_FPS)
-						glx_enable_sphericalfog();
+						gfx_fog_enable_spherical();
 #endif
 					matrix_pop(matrix_projection);
 					glDepthRange(0.0F, 1.0F);
@@ -390,9 +383,9 @@ void display() {
 			if(!map_isair(camera_x, camera_y, camera_z))
 				glClear(GL_COLOR_BUFFER_BIT);
 
-			glx_disable_sphericalfog();
+			gfx_fog_disable_spherical();
 			if(settings.smooth_fog)
-				glDisable(GL_FOG);
+				gfx_fog_disable();
 		}
 	}
 

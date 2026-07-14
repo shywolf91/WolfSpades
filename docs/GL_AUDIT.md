@@ -534,3 +534,74 @@ Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outs
 ### `gfx.h` GL-type leak check
 
 Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outside `gfx_` prefix is empty.
+
+---
+
+## Phase 1b progress — Step 5: models (kv6) + fog
+
+**Date:** 2026-07-14  
+**Scope:** kv6 lighting/combine/point-sprite shader + mesh submission; spherical + EXP2 fog. Zero behavior change. No shader rewrite, no lighting value changes, no point-size “fixes”.
+
+### API added
+
+| API | Role |
+|-----|------|
+| `gfx_model_light` | `LIGHT0` ambient+diffuse (`kv6_calclight`) |
+| `gfx_model_mesh_begin` / `texenv_color` / `mesh_end` | Exact combine+lighting+dummy bind / tint / teardown sequence |
+| `gfx_model_points_begin_fixed` / `end_fixed` | `PointParameter` + `PointSize` + lighting stack |
+| `gfx_model_points_begin_shader` / `end_shader` | Lazy kv6 program compile; uniforms `dist_factor`/`size`/`fog`/`camera`/`model`; `PROGRAM_POINT_SIZE` |
+| `gfx_color3f` / `gfx_color3ub` | Point-path team/colorize tint |
+| `gfx_multisample` | MSAA off/on around point draws |
+| `gfx_fog_enable_exp2` / `gfx_fog_disable` | Smooth EXP2 fog (mode+density+color+enable) |
+| `gfx_fog_enable_spherical` / `disable_spherical` | Former `glx_*_sphericalfog` bodies moved verbatim |
+| `gfx_fog_active` | Reads `glx_fog` flag used by shader `dist_factor` |
+
+Reused: `gfx_texture_2d`, `gfx_mesh_*`.
+
+### Per-category conversion (model.c)
+
+| Category | Approx. former sites | Result |
+|----------|---------------------:|--------|
+| Lighting | 2 | → `gfx_model_light` |
+| Mesh combine / lighting | ~27 | → `gfx_model_mesh_*` + `gfx_texture_2d` |
+| Point fixed-function | ~8 | → `gfx_model_points_*_fixed` |
+| Point shader + uniforms | ~10 | → `gfx_model_points_*_shader` (source relocated) |
+| Color / MSAA | ~6 | → `gfx_color*` / `gfx_multisample` |
+| Submission | 14 `glx_displaylist_*` | → `gfx_mesh_*` |
+| **Direct `gl*` left in model.c** | | **0** |
+
+### Shader relocation
+
+- Vertex + fragment source strings moved byte-identical into `gfx_gl.c` (`gfx_kv6_ensure_program`).
+- Compile helper preserves prior `glx_shader` attach quirk (`if(vertex)` attaches fragment).
+- Uniform names/meanings/update points unchanged; lazy init on first shader begin (was first point-mesh build).
+
+### Fog conversion
+
+| Site | Change |
+|------|--------|
+| `main.c` smooth fog | → `gfx_fog_enable_exp2(fog_color, 0.015F)` |
+| `main.c` post-scene | → `gfx_fog_disable` |
+| `main.c` spherical | → `gfx_fog_enable/disable_spherical` (incl. ES FPS toggles) |
+| `glx.c` spherical bodies | → thin wrappers calling `gfx_fog_*_spherical` |
+
+### Sites / leftovers (justified)
+
+| Item | Why kept |
+|------|----------|
+| `glx_shader` body in `glx.c` | Unused after model move; `glx.h` not in allowlist — left for ABI |
+| `glx_fog` / `glx_version` globals | Flag still owned in `glx.c`; spherical gfx path updates `glx_fog`; model still reads `glx_version` |
+| `glx_displaylist` typedef in `model.h` | `model.h` not in allowlist; still alias of `gfx_mesh_t` |
+| `glClearColor`/`glClear` / microui / hud | Step 6 |
+
+### Naming deviations vs §4 / step brief
+
+- Dedicated `gfx_model_mesh_*` / `gfx_model_points_*` rather than a single `GFX_PASS_MODELS` (interleaved tint/draw order needs mid-pass setters).
+- Split fixed vs shader point begins (mirrors `#ifndef OPENGL_ES` / `glx_version` branches).
+- `gfx_fog_enable_exp2(color, density)` packs mode+params+enable (matches single call site).
+- `gfx_fog_active` instead of exporting `glx_fog` through `gfx.h`.
+- `gfx_color3f`/`ub` naming matches step-3 granular style (`gfx_blend`), not audit `gfx_set_color*`.
+
+### `gfx.h` GL-type leak check
+
+Confirmed: no `GLuint`/`GLenum`/`GLFW`/GLEW includes; case-insensitive `gl` outside `gfx_` prefix is empty.

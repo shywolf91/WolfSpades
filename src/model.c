@@ -32,6 +32,7 @@
 #include "model.h"
 #include "model_normals.h"
 #include "texture.h"
+#include "gfx.h"
 
 struct kv6_t model_playerdead;
 struct kv6_t model_playerhead;
@@ -205,8 +206,8 @@ void kv6_load(struct kv6_t* kv6, void* bytes, float scale) {
 
 void kv6_rebuild(struct kv6_t* kv6) {
 	if(kv6->has_display_list) {
-		glx_displaylist_destroy(kv6->display_list + 0);
-		glx_displaylist_destroy(kv6->display_list + 1);
+		gfx_mesh_destroy(kv6->display_list + 0);
+		gfx_mesh_destroy(kv6->display_list + 1);
 		kv6->has_display_list = false;
 	}
 }
@@ -220,8 +221,7 @@ void kv6_calclight(int x, int y, int z) {
 	float lambient[4] = {0.5F * f, 0.5F * f, 0.5F * f, 1.0F};
 	float ldiffuse[4] = {0.5F * f, 0.5F * f, 0.5F * f, 1.0F};
 
-	glLightfv(GL_LIGHT0, GL_AMBIENT, lambient);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, ldiffuse);
+	gfx_model_light(lambient, ldiffuse);
 }
 
 static int kv6_voxel_cmp(const void* a, const void* b) {
@@ -315,7 +315,6 @@ static void greedy_mesh(struct kv6_t* kv6, struct kv6_voxel* voxel, uint8_t* mar
 	}
 }
 
-static int kv6_program = -1;
 void kv6_render(struct kv6_t* kv6, unsigned char team) {
 	if(!kv6)
 		return;
@@ -328,8 +327,8 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 			struct tesselator tess_team;
 			tesselator_create(&tess_team, VERTEX_INT, 1);
 
-			glx_displaylist_create(kv6->display_list + 0, true, true);
-			glx_displaylist_create(kv6->display_list + 1, true, true);
+			gfx_mesh_create(kv6->display_list + 0, true, true);
+			gfx_mesh_create(kv6->display_list + 1, true, true);
 
 			uint8_t marked[kv6->voxel_count];
 			memset(marked, 0, sizeof(uint8_t) * kv6->voxel_count);
@@ -413,30 +412,11 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 
 			kv6->has_display_list = true;
 		} else {
-			glEnable(GL_LIGHTING);
-			glEnable(GL_LIGHT0);
-			glEnable(GL_COLOR_MATERIAL);
-#ifndef OPENGL_ES
-			glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-#endif
-			glEnable(GL_NORMALIZE);
-
-			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-			glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-			glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
-			glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_CONSTANT);
-			glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_CONSTANT);
-			glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_PREVIOUS);
-			glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_PREVIOUS);
-			glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
-			glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
-			glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
-			glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
-			glBindTexture(GL_TEXTURE_2D, texture_dummy.texture_id);
+			gfx_model_mesh_begin((gfx_texture_t)texture_dummy.texture_id);
 
 			if(kv6->colorize) {
-				glEnable(GL_TEXTURE_2D);
-				glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, (float[]) {kv6->red, kv6->green, kv6->blue, 1.0F});
+				gfx_texture_2d(1);
+				gfx_model_texenv_color(kv6->red, kv6->green, kv6->blue);
 			}
 
 			matrix_push(matrix_model);
@@ -444,39 +424,30 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 			matrix_translate(matrix_model, -kv6->xpiv, -kv6->zpiv, -kv6->ypiv);
 			matrix_upload();
 
-			glx_displaylist_draw(kv6->display_list + 0, GLX_DISPLAYLIST_NORMAL);
+			gfx_mesh_draw(kv6->display_list + 0, GFX_MESH_SHORT);
 
 			if(!kv6->colorize)
-				glEnable(GL_TEXTURE_2D);
+				gfx_texture_2d(1);
 
 			switch(team) {
 				case TEAM_1:
-					glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR,
-							   (float[]) {gamestate.team_1.red * 0.75F / 255.0F,
-										  gamestate.team_1.green * 0.75F / 255.0F,
-										  gamestate.team_1.blue * 0.75F / 255.0F, 1.0F});
+					gfx_model_texenv_color(gamestate.team_1.red * 0.75F / 255.0F,
+										   gamestate.team_1.green * 0.75F / 255.0F,
+										   gamestate.team_1.blue * 0.75F / 255.0F);
 					break;
 				case TEAM_2:
-					glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR,
-							   (float[]) {gamestate.team_2.red * 0.75F / 255.0F,
-										  gamestate.team_2.green * 0.75F / 255.0F,
-										  gamestate.team_2.blue * 0.75F / 255.0F, 1.0F});
+					gfx_model_texenv_color(gamestate.team_2.red * 0.75F / 255.0F,
+										   gamestate.team_2.green * 0.75F / 255.0F,
+										   gamestate.team_2.blue * 0.75F / 255.0F);
 					break;
-				default: glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, (float[]) {0, 0, 0, 1});
+				default: gfx_model_texenv_color(0, 0, 0);
 			}
 
-			glx_displaylist_draw(kv6->display_list + 1, GLX_DISPLAYLIST_NORMAL);
+			gfx_mesh_draw(kv6->display_list + 1, GFX_MESH_SHORT);
 
 			matrix_pop(matrix_model);
 
-			glBindTexture(GL_TEXTURE_2D, 0);
-			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-			glDisable(GL_TEXTURE_2D);
-
-			glDisable(GL_NORMALIZE);
-			glDisable(GL_COLOR_MATERIAL);
-			glDisable(GL_LIGHT0);
-			glDisable(GL_LIGHTING);
+			gfx_model_mesh_end();
 		}
 	} else {
 		// render like on voxlap
@@ -488,8 +459,8 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 
 			int cnt[2] = {0, 0};
 
-			glx_displaylist_create(kv6->display_list + 0, !kv6->colorize, true);
-			glx_displaylist_create(kv6->display_list + 1, false, true);
+			gfx_mesh_create(kv6->display_list + 0, !kv6->colorize, true);
+			gfx_mesh_create(kv6->display_list + 1, false, true);
 
 			for(int i = 0; i < kv6->voxel_count; i++) {
 				int b = red(kv6->voxels[i].color);
@@ -515,32 +486,9 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 				cnt[ind]++;
 			}
 
-			glx_displaylist_update(kv6->display_list + 0, cnt[0], GLX_DISPLAYLIST_POINTS, colors[0], vertices[0],
-								   normals[0]);
+			gfx_mesh_update(kv6->display_list + 0, cnt[0], GFX_MESH_POINTS, colors[0], vertices[0], normals[0]);
 
-			glx_displaylist_update(kv6->display_list + 1, cnt[1], GLX_DISPLAYLIST_POINTS, colors[1], vertices[1],
-								   normals[1]);
-
-			if(kv6_program < 0) {
-				kv6_program
-					= glx_shader("uniform float size;\n"
-								 "uniform vec3 fog;\n"
-								 "uniform vec3 camera;\n"
-								 "uniform mat4 model;\n"
-								 "uniform float dist_factor;\n"
-								 "void main(void) {\n"
-								 "	gl_Position = gl_ModelViewProjectionMatrix*gl_Vertex;\n"
-								 "	float dist = length((model*gl_Vertex).xz-camera.xz)*dist_factor;\n"
-								 "	vec3 N = normalize(model*vec4(gl_Normal,0)).xyz;\n"
-								 "	vec3 L = normalize(vec3(0,-1,1));\n"
-								 "	float d = clamp(dot(N,L),0.0,1.0)*0.5+0.5;\n"
-								 "	gl_FrontColor = mix(vec4(d,d,d,1.0)*gl_Color,vec4(fog,1.0),min(dist,1.0));\n"
-								 "	gl_PointSize = size/gl_Position.w;\n"
-								 "}\n",
-								 "void main(void) {\n"
-								 "	gl_FragColor = gl_Color;\n"
-								 "}\n");
-			}
+			gfx_mesh_update(kv6->display_list + 1, cnt[1], GFX_MESH_POINTS, colors[1], vertices[1], normals[1]);
 		}
 
 		float near_plane_height
@@ -550,60 +498,49 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 		float len_y = len3D(matrix_model[0][1], matrix_model[1][1], matrix_model[2][1]);
 		float len_z = len3D(matrix_model[0][2], matrix_model[1][2], matrix_model[2][2]);
 
+		float point_size = 1.414F * near_plane_height * kv6->scale * (len_x + len_y + len_z) / 3.0F;
+
 #ifndef OPENGL_ES
 		if(!glx_version)
 #endif
 		{
-			glPointParameterfv(GL_POINT_DISTANCE_ATTENUATION, (float[]) {0.0F, 0.0F, 1.0F});
-			glPointSize(1.414F * near_plane_height * kv6->scale * (len_x + len_y + len_z) / 3.0F);
-			glEnable(GL_LIGHTING);
-			glEnable(GL_LIGHT0);
-			glEnable(GL_COLOR_MATERIAL);
-#ifndef OPENGL_ES
-			glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-#endif
-			glEnable(GL_NORMALIZE);
+			gfx_model_points_begin_fixed(point_size);
 		}
 
 #ifndef OPENGL_ES
 		if(glx_version) {
-			glEnable(GL_PROGRAM_POINT_SIZE);
-			glUseProgram(kv6_program);
-			glUniform1f(glGetUniformLocation(kv6_program, "dist_factor"),
-						glx_fog ? 1.0F / settings.render_distance : 0.0F);
-			glUniform1f(glGetUniformLocation(kv6_program, "size"),
-						1.414F * near_plane_height * kv6->scale * (len_x + len_y + len_z) / 3.0F);
-			glUniform3f(glGetUniformLocation(kv6_program, "fog"), fog_color[0], fog_color[1], fog_color[2]);
-			glUniform3f(glGetUniformLocation(kv6_program, "camera"), camera_x, camera_y, camera_z);
-			glUniformMatrix4fv(glGetUniformLocation(kv6_program, "model"), 1, 0, (float*)matrix_model);
+			float dist_factor = gfx_fog_active() ? 1.0F / settings.render_distance : 0.0F;
+			float camera[3] = {camera_x, camera_y, camera_z};
+			gfx_model_points_begin_shader(point_size, dist_factor, fog_color, camera, (float*)matrix_model);
 		}
 #endif
 		if(settings.multisamples)
-			glDisable(GL_MULTISAMPLE);
+			gfx_multisample(0);
 
 		if(kv6->colorize)
-			glColor3f(kv6->red, kv6->green, kv6->blue);
+			gfx_color3f(kv6->red, kv6->green, kv6->blue);
 
-		glx_displaylist_draw(kv6->display_list + 0, GLX_DISPLAYLIST_POINTS);
+		gfx_mesh_draw(kv6->display_list + 0, GFX_MESH_POINTS);
 
 		switch(team) {
 			case TEAM_1:
-				glColor3ub(gamestate.team_1.red * 0.75F, gamestate.team_1.green * 0.75F, gamestate.team_1.blue * 0.75F);
+				gfx_color3ub(gamestate.team_1.red * 0.75F, gamestate.team_1.green * 0.75F,
+							 gamestate.team_1.blue * 0.75F);
 				break;
 			case TEAM_2:
-				glColor3ub(gamestate.team_2.red * 0.75F, gamestate.team_2.green * 0.75F, gamestate.team_2.blue * 0.75F);
+				gfx_color3ub(gamestate.team_2.red * 0.75F, gamestate.team_2.green * 0.75F,
+							 gamestate.team_2.blue * 0.75F);
 				break;
-			default: glColor3ub(0, 0, 0);
+			default: gfx_color3ub(0, 0, 0);
 		}
 
-		glx_displaylist_draw(kv6->display_list + 1, GLX_DISPLAYLIST_POINTS);
+		gfx_mesh_draw(kv6->display_list + 1, GFX_MESH_POINTS);
 
 		if(settings.multisamples)
-			glEnable(GL_MULTISAMPLE);
+			gfx_multisample(1);
 #ifndef OPENGL_ES
 		if(glx_version) {
-			glUseProgram(0);
-			glDisable(GL_PROGRAM_POINT_SIZE);
+			gfx_model_points_end_shader();
 		}
 #endif
 
@@ -611,10 +548,7 @@ void kv6_render(struct kv6_t* kv6, unsigned char team) {
 		if(!glx_version)
 #endif
 		{
-			glDisable(GL_NORMALIZE);
-			glDisable(GL_COLOR_MATERIAL);
-			glDisable(GL_LIGHT0);
-			glDisable(GL_LIGHTING);
+			gfx_model_points_end_fixed();
 		}
 	}
 }

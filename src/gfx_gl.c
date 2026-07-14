@@ -18,12 +18,17 @@
 */
 
 #include <string.h>
+#include <math.h>
 
 #include "common.h"
 #include "config.h"
 #include "log.h"
 #include "gfx.h"
 #include "glx.h"
+#include "camera.h"
+#include "matrix.h"
+#include "map.h"
+#include "texture.h"
 
 static void* gfx_window;
 
@@ -509,4 +514,281 @@ void gfx_pass_end(gfx_pass_t pass) {
 				glEnable(GL_MULTISAMPLE);
 			break;
 	}
+}
+
+void gfx_color3f(float r, float g, float b) {
+	glColor3f(r, g, b);
+}
+
+void gfx_color3ub(unsigned char r, unsigned char g, unsigned char b) {
+	glColor3ub(r, g, b);
+}
+
+void gfx_multisample(int enabled) {
+	if(enabled)
+		glEnable(GL_MULTISAMPLE);
+	else
+		glDisable(GL_MULTISAMPLE);
+}
+
+void gfx_model_light(const float ambient4[4], const float diffuse4[4]) {
+	glLightfv(GL_LIGHT0, GL_AMBIENT, ambient4);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse4);
+}
+
+void gfx_model_mesh_begin(gfx_texture_t dummy) {
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	glEnable(GL_COLOR_MATERIAL);
+#ifndef OPENGL_ES
+	glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+#endif
+	glEnable(GL_NORMALIZE);
+
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+	glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+	glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+	glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_CONSTANT);
+	glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_CONSTANT);
+	glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_PREVIOUS);
+	glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_PREVIOUS);
+	glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+	glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+	glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+	glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+	glBindTexture(GL_TEXTURE_2D, (GLuint)dummy);
+}
+
+void gfx_model_texenv_color(float r, float g, float b) {
+	float c[4] = {r, g, b, 1.0F};
+	glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, c);
+}
+
+void gfx_model_mesh_end(void) {
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	glDisable(GL_TEXTURE_2D);
+
+	glDisable(GL_NORMALIZE);
+	glDisable(GL_COLOR_MATERIAL);
+	glDisable(GL_LIGHT0);
+	glDisable(GL_LIGHTING);
+}
+
+void gfx_model_points_begin_fixed(float point_size) {
+	glPointParameterfv(GL_POINT_DISTANCE_ATTENUATION, (float[]) {0.0F, 0.0F, 1.0F});
+	glPointSize(point_size);
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	glEnable(GL_COLOR_MATERIAL);
+#ifndef OPENGL_ES
+	glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+#endif
+	glEnable(GL_NORMALIZE);
+}
+
+void gfx_model_points_end_fixed(void) {
+	glDisable(GL_NORMALIZE);
+	glDisable(GL_COLOR_MATERIAL);
+	glDisable(GL_LIGHT0);
+	glDisable(GL_LIGHTING);
+}
+
+#ifndef OPENGL_ES
+static int gfx_kv6_program = -1;
+
+static int gfx_compile_shader(const char* vertex, const char* fragment) {
+	int v, f;
+	if(vertex) {
+		v = glCreateShader(GL_VERTEX_SHADER);
+		glShaderSource(v, 1, (const GLchar* const*)&vertex, NULL);
+		glCompileShader(v);
+	}
+
+	if(fragment) {
+		f = glCreateShader(GL_FRAGMENT_SHADER);
+		glShaderSource(f, 1, (const GLchar* const*)&fragment, NULL);
+		glCompileShader(f);
+	}
+
+	int program = glCreateProgram();
+	if(vertex)
+		glAttachShader(program, v);
+	if(vertex)
+		glAttachShader(program, f);
+	glLinkProgram(program);
+	return program;
+}
+
+static void gfx_kv6_ensure_program(void) {
+	if(gfx_kv6_program >= 0)
+		return;
+	/* Byte-identical to former model.c kv6 point-sprite shader source. */
+	gfx_kv6_program
+		= gfx_compile_shader("uniform float size;\n"
+							 "uniform vec3 fog;\n"
+							 "uniform vec3 camera;\n"
+							 "uniform mat4 model;\n"
+							 "uniform float dist_factor;\n"
+							 "void main(void) {\n"
+							 "	gl_Position = gl_ModelViewProjectionMatrix*gl_Vertex;\n"
+							 "	float dist = length((model*gl_Vertex).xz-camera.xz)*dist_factor;\n"
+							 "	vec3 N = normalize(model*vec4(gl_Normal,0)).xyz;\n"
+							 "	vec3 L = normalize(vec3(0,-1,1));\n"
+							 "	float d = clamp(dot(N,L),0.0,1.0)*0.5+0.5;\n"
+							 "	gl_FrontColor = mix(vec4(d,d,d,1.0)*gl_Color,vec4(fog,1.0),min(dist,1.0));\n"
+							 "	gl_PointSize = size/gl_Position.w;\n"
+							 "}\n",
+							 "void main(void) {\n"
+							 "	gl_FragColor = gl_Color;\n"
+							 "}\n");
+}
+#endif
+
+void gfx_model_points_begin_shader(float point_size, float dist_factor, const float fog_rgb[3], const float camera[3],
+								   const float model16[16]) {
+#ifndef OPENGL_ES
+	gfx_kv6_ensure_program();
+	glEnable(GL_PROGRAM_POINT_SIZE);
+	glUseProgram(gfx_kv6_program);
+	glUniform1f(glGetUniformLocation(gfx_kv6_program, "dist_factor"), dist_factor);
+	glUniform1f(glGetUniformLocation(gfx_kv6_program, "size"), point_size);
+	glUniform3f(glGetUniformLocation(gfx_kv6_program, "fog"), fog_rgb[0], fog_rgb[1], fog_rgb[2]);
+	glUniform3f(glGetUniformLocation(gfx_kv6_program, "camera"), camera[0], camera[1], camera[2]);
+	glUniformMatrix4fv(glGetUniformLocation(gfx_kv6_program, "model"), 1, 0, model16);
+#else
+	(void)point_size;
+	(void)dist_factor;
+	(void)fog_rgb;
+	(void)camera;
+	(void)model16;
+#endif
+}
+
+void gfx_model_points_end_shader(void) {
+#ifndef OPENGL_ES
+	glUseProgram(0);
+	glDisable(GL_PROGRAM_POINT_SIZE);
+#endif
+}
+
+void gfx_fog_enable_exp2(const float color4[4], float density) {
+#ifdef OPENGL_ES
+	glFogx(GL_FOG_MODE, GL_EXP2);
+#else
+	glFogi(GL_FOG_MODE, GL_EXP2);
+#endif
+	glFogf(GL_FOG_DENSITY, density);
+	glFogfv(GL_FOG_COLOR, color4);
+	glEnable(GL_FOG);
+}
+
+void gfx_fog_disable(void) {
+	glDisable(GL_FOG);
+}
+
+void gfx_fog_enable_spherical(void) {
+#ifndef OPENGL_ES
+	if(!settings.smooth_fog) {
+		glActiveTexture(GL_TEXTURE1);
+		glEnable(GL_TEXTURE_2D);
+		glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, (float[]) {fog_color[0], fog_color[1], fog_color[2], 1.0F});
+		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_BLEND);
+		glBindTexture(GL_TEXTURE_2D, texture_gradient.texture_id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexGeni(GL_T, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+		glTexGeni(GL_S, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+		glTexGenfv(GL_T, GL_EYE_PLANE,
+				   (float[]) {1.0F / settings.render_distance / 2.0F, 0.0F, 0.0F,
+							  -camera_x / settings.render_distance / 2.0F + 0.5F});
+		glTexGenfv(GL_S, GL_EYE_PLANE,
+				   (float[]) {0.0F, 0.0F, 1.0F / settings.render_distance / 2.0F,
+							  -camera_z / settings.render_distance / 2.0F + 0.5F});
+		glEnable(GL_TEXTURE_GEN_T);
+		glEnable(GL_TEXTURE_GEN_S);
+		glActiveTexture(GL_TEXTURE0);
+	} else {
+		matrix_push(matrix_model);
+		matrix_identity(matrix_model);
+		matrix_upload();
+		matrix_pop(matrix_model);
+
+		glEnable(GL_LIGHTING);
+		glEnable(GL_LIGHT1);
+		glEnable(GL_COLOR_MATERIAL);
+		glColorMaterial(GL_FRONT, GL_DIFFUSE);
+		glLightModelfv(GL_LIGHT_MODEL_AMBIENT, (float[]) {fog_color[0], fog_color[1], fog_color[2], 1.0F});
+
+		glLightfv(GL_LIGHT1, GL_POSITION,
+				  (float[]) {camera_x, (settings.render_distance * map_size_y) / 16.0F, camera_z, 1.0F});
+		glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, (float[]) {0.0F, -1.0F, 0.0F});
+		glLightfv(GL_LIGHT1, GL_DIFFUSE, (float[]) {1.0F, 1.0F, 1.0F, 1.0F});
+		glLightfv(GL_LIGHT1, GL_AMBIENT, (float[]) {-fog_color[0], -fog_color[1], -fog_color[2], 1.0F});
+		glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, tan(16.0F / map_size_y) / PI * 180.0F);
+		glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 128.0F);
+		glNormal3f(0.0F, 1.0F, 0.0F);
+	}
+#else
+	matrix_push(matrix_model);
+	matrix_identity(matrix_model);
+	matrix_upload();
+	matrix_pop(matrix_model);
+
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT1);
+	glEnable(GL_COLOR_MATERIAL);
+	float amb[4] = {0.0F, 0.0F, 0.0F, 1.0F};
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, amb);
+
+	float lpos[4] = {camera_x, (settings.render_distance * map_size_y) / 16.0F, camera_z, 1.0F};
+	glLightfv(GL_LIGHT1, GL_POSITION, lpos);
+	float dir[3] = {0.0F, -1.0F, 0.0F};
+	glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, dir);
+	float dif[4] = {0.0F, 0.0F, 0.0F, 1.0F};
+	glLightfv(GL_LIGHT1, GL_DIFFUSE, dif);
+	float amb2[4] = {1.0F, 1.0F, 1.0F, 1.0F};
+	glLightfv(GL_LIGHT1, GL_AMBIENT, amb2);
+	glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, tan(16.0F / map_size_y) / PI * 180.0F);
+	glLightf(GL_LIGHT1, GL_SPOT_EXPONENT, 128.0F);
+	glNormal3f(0.0F, 1.0F, 0.0F);
+	glEnable(GL_FOG);
+	glFogf(GL_FOG_MODE, GL_LINEAR);
+	glFogf(GL_FOG_START, 0.0F);
+	glFogf(GL_FOG_END, settings.render_distance);
+	glFogfv(GL_FOG_COLOR, fog_color);
+#endif
+	glx_fog = 1;
+}
+
+void gfx_fog_disable_spherical(void) {
+#ifndef OPENGL_ES
+	if(!settings.smooth_fog) {
+		glActiveTexture(GL_TEXTURE1);
+		glDisable(GL_TEXTURE_GEN_T);
+		glDisable(GL_TEXTURE_GEN_S);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+		glDisable(GL_TEXTURE_2D);
+		glActiveTexture(GL_TEXTURE0);
+	} else {
+		glDisable(GL_COLOR_MATERIAL);
+		glDisable(GL_LIGHT1);
+		glDisable(GL_LIGHTING);
+		float a[4] = {0.2F, 0.2F, 0.2F, 1.0F};
+		glLightModelfv(GL_LIGHT_MODEL_AMBIENT, a);
+	}
+#else
+	glDisable(GL_FOG);
+	glDisable(GL_COLOR_MATERIAL);
+	glDisable(GL_LIGHT1);
+	glDisable(GL_LIGHTING);
+	float a[4] = {0.2F, 0.2F, 0.2F, 1.0F};
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, a);
+#endif
+	glx_fog = 0;
+}
+
+int gfx_fog_active(void) {
+	return glx_fog;
 }

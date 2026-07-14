@@ -122,4 +122,32 @@ void gfx_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, con
 /* Collapsing-structure depth pre-pass (color-mask around double mesh draw). */
 void gfx_color_mask(int r, int g, int b, int a);
 
+/* Current color (kv6 point tint). */
+void gfx_color3f(float r, float g, float b);
+void gfx_color3ub(unsigned char r, unsigned char g, unsigned char b);
+void gfx_multisample(int enabled);
+
+/* --- kv6 model lighting / mesh combine / point sprites --- */
+void gfx_model_light(const float ambient4[4], const float diffuse4[4]);
+
+void gfx_model_mesh_begin(gfx_texture_t dummy);
+void gfx_model_texenv_color(float r, float g, float b); /* ENV_COLOR rgb, a=1 */
+void gfx_model_mesh_end(void);
+
+/* Fixed-function point path (legacy / ES when !gfx version flag). */
+void gfx_model_points_begin_fixed(float point_size);
+void gfx_model_points_end_fixed(void);
+
+/* Point-sprite shader path: lazy-compiles kv6 program; uniforms match prior model.c. */
+void gfx_model_points_begin_shader(float point_size, float dist_factor, const float fog_rgb[3],
+								   const float camera[3], const float model16[16]);
+void gfx_model_points_end_shader(void);
+
+/* --- fog --- */
+void gfx_fog_enable_exp2(const float color4[4], float density);
+void gfx_fog_disable(void);
+void gfx_fog_enable_spherical(void);
+void gfx_fog_disable_spherical(void);
+int gfx_fog_active(void); /* spherical fog on/off flag */
+
 #endif
