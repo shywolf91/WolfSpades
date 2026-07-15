@@ -19,6 +19,21 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(vxl)
 
+FetchContent_Declare(
+	vk-bootstrap
+	GIT_REPOSITORY	https://github.com/charles-lunarg/vk-bootstrap
+	GIT_TAG			v1.4.356
+)
+set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(vk-bootstrap)
+
+FetchContent_Declare(
+	VulkanMemoryAllocator
+	GIT_REPOSITORY	https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+	GIT_TAG			v3.3.0
+)
+FetchContent_MakeAvailable(VulkanMemoryAllocator)
+
 macro(download_file_if_it_doesnt_exist filename url)
 	set(argn ${ARGN})
 	list(LENGTH argn no_fallback)
@@ -64,7 +79,9 @@ list(APPEND CLIENT_SOURCES config.c)
 list(APPEND CLIENT_SOURCES dr_wav.c)
 list(APPEND CLIENT_SOURCES file.c)
 list(APPEND CLIENT_SOURCES font.c)
+list(APPEND CLIENT_SOURCES gfx.c)
 list(APPEND CLIENT_SOURCES gfx_gl.c)
+list(APPEND CLIENT_SOURCES gfx_vk.cpp)
 list(APPEND CLIENT_SOURCES grenade.c)
 list(APPEND CLIENT_SOURCES http.c)
 list(APPEND CLIENT_SOURCES gmi.c)
@@ -116,11 +133,11 @@ execute_process(
 include(CheckIPOSupported)
 check_ipo_supported(RESULT lto_supported OUTPUT error)
 
-if(lto_supported)
+if(lto_supported AND CMAKE_BUILD_TYPE STREQUAL "Release")
 	message(STATUS "IPO / LTO enabled")
 	set_property(TARGET client PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 else()
-	message(STATUS "IPO / LTO not supported: <${error}>")
+	message(STATUS "IPO / LTO disabled for this build (supported=${lto_supported}, type=${CMAKE_BUILD_TYPE})")
 endif()
 
 target_compile_definitions(client PRIVATE GIT_COMMIT_HASH="${GIT_COMMIT_HASH}")
@@ -144,6 +161,8 @@ set_target_properties(
 	client PROPERTIES
 	RUNTIME_OUTPUT_DIRECTORY ${BetterSpades_SOURCE_DIR}/build/BetterSpades
 	C_STANDARD 99
+	CXX_STANDARD 20
+	CXX_STANDARD_REQUIRED ON
 )
 
 set(CMAKE_PREFIX_PATH  ${CMAKE_PREFIX_PATH} ${BetterSpades_SOURCE_DIR}/deps)
@@ -176,6 +195,11 @@ else()
 	target_link_libraries(client OpenGL::EGL)
 	target_compile_definitions(client PRIVATE OPENGL_ES)
 endif()
+
+# Vulkan loader + headers via CMake's FindVulkan (MSYS2: mingw-w64-x86_64-vulkan-loader / vulkan-headers).
+find_package(Vulkan REQUIRED)
+target_link_libraries(client Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
+target_include_directories(client PRIVATE ${vulkanmemoryallocator_SOURCE_DIR}/include)
 if(ENABLE_RPC)
 	target_link_libraries(client discord-rpc stdc++)
 	target_compile_definitions(client PRIVATE USE_RPC DISCORD_DISABLE_IO_THREAD)

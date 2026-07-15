@@ -38,6 +38,7 @@
 #include "config.h"
 #include "log.h"
 #include "gfx.h"
+#include "gfx_backend.h"
 #include "camera.h"
 #include "matrix.h"
 #include "map.h"
@@ -58,7 +59,7 @@ static void gfx_track_color4f(float r, float g, float b, float a) {
 	gfx_current_color[3] = a;
 }
 
-void gfx_apply_context_hints(void) {
+void gfx_gl_apply_context_hints(void) {
 #ifdef USE_GLFW
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
@@ -90,7 +91,7 @@ void gfx_apply_context_hints(void) {
 #endif
 }
 
-void gfx_init(void* window) {
+void gfx_gl_init(void* window) {
 	gfx_window = window;
 
 #ifdef USE_GLFW
@@ -140,15 +141,15 @@ void gfx_init(void* window) {
 	glDisable(GL_FOG);
 }
 
-void gfx_shutdown(void) {
+void gfx_gl_shutdown(void) {
 	gfx_window = NULL;
 }
 
-void gfx_resize(int w, int h) {
+void gfx_gl_resize(int w, int h) {
 	glViewport(0, 0, w, h);
 }
 
-void gfx_swap_buffers(void) {
+void gfx_gl_swap_buffers(void) {
 #ifdef USE_GLFW
 	glfwSwapBuffers(gfx_window);
 #endif
@@ -158,7 +159,7 @@ void gfx_swap_buffers(void) {
 #endif
 }
 
-void gfx_set_vsync(int interval) {
+void gfx_gl_set_vsync(int interval) {
 #ifdef USE_GLFW
 	glfwSwapInterval(interval);
 #endif
@@ -168,18 +169,18 @@ void gfx_set_vsync(int interval) {
 #endif
 }
 
-void gfx_matrix_projection(const float* m16) {
+void gfx_gl_matrix_projection(const float* m16) {
 	glMatrixMode(GL_PROJECTION);
 	glLoadMatrixf(m16);
 }
 
-void gfx_matrix_modelview(const float* view16, const float* model16) {
+void gfx_gl_matrix_modelview(const float* view16, const float* model16) {
 	glMatrixMode(GL_MODELVIEW);
 	glLoadMatrixf(view16);
 	glMultMatrixf(model16);
 }
 
-void gfx_matrix_texture(float sx, float sy) {
+void gfx_gl_matrix_texture(float sx, float sy) {
 	glMatrixMode(GL_TEXTURE);
 	glLoadIdentity();
 	glScalef(sx, sy, 1.0F);
@@ -194,7 +195,7 @@ static GLenum gfx_wrap_to_gl(gfx_wrap_t wrap) {
 	return (wrap == GFX_WRAP_CLAMP) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
 }
 
-gfx_texture_t gfx_texture_create_rgba(int w, int h, const void* pixels) {
+gfx_texture_t gfx_gl_texture_create_rgba(int w, int h, const void* pixels) {
 	GLuint id = 0;
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
@@ -207,7 +208,7 @@ gfx_texture_t gfx_texture_create_rgba(int w, int h, const void* pixels) {
 	return (gfx_texture_t)id;
 }
 
-void gfx_texture_upload_rgba(gfx_texture_t tex, int w, int h, const void* pixels) {
+void gfx_gl_texture_upload_rgba(gfx_texture_t tex, int w, int h, const void* pixels) {
 	glBindTexture(GL_TEXTURE_2D, (GLuint)tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -217,7 +218,7 @@ void gfx_texture_upload_rgba(gfx_texture_t tex, int w, int h, const void* pixels
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-gfx_texture_t gfx_texture_create_alpha(int w, int h, const void* pixels) {
+gfx_texture_t gfx_gl_texture_create_alpha(int w, int h, const void* pixels) {
 	GLuint id = 0;
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
@@ -228,13 +229,13 @@ gfx_texture_t gfx_texture_create_alpha(int w, int h, const void* pixels) {
 	return (gfx_texture_t)id;
 }
 
-void gfx_texture_update_sub_rgba(gfx_texture_t tex, int x, int y, int w, int h, const void* pixels) {
+void gfx_gl_texture_update_sub_rgba(gfx_texture_t tex, int x, int y, int w, int h, const void* pixels) {
 	glBindTexture(GL_TEXTURE_2D, (GLuint)tex);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void gfx_texture_set_filter(gfx_texture_t tex, gfx_filter_t filter) {
+void gfx_gl_texture_set_filter(gfx_texture_t tex, gfx_filter_t filter) {
 	GLenum mode = gfx_filter_to_gl(filter);
 	glBindTexture(GL_TEXTURE_2D, (GLuint)tex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mode);
@@ -242,7 +243,7 @@ void gfx_texture_set_filter(gfx_texture_t tex, gfx_filter_t filter) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void gfx_texture_set_filter_wrap_bound(gfx_filter_t filter, gfx_wrap_t wrap) {
+void gfx_gl_texture_set_filter_wrap_bound(gfx_filter_t filter, gfx_wrap_t wrap) {
 	GLenum f = gfx_filter_to_gl(filter);
 	GLenum w = gfx_wrap_to_gl(wrap);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, f);
@@ -251,34 +252,34 @@ void gfx_texture_set_filter_wrap_bound(gfx_filter_t filter, gfx_wrap_t wrap) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, w);
 }
 
-void gfx_texture_bind(gfx_texture_t tex) {
+void gfx_gl_texture_bind(gfx_texture_t tex) {
 	glBindTexture(GL_TEXTURE_2D, (GLuint)tex);
 }
 
-void gfx_texture_destroy(gfx_texture_t tex) {
+void gfx_gl_texture_destroy(gfx_texture_t tex) {
 	GLuint id = (GLuint)tex;
 	glDeleteTextures(1, &id);
 }
 
-int gfx_max_texture_size(void) {
+int gfx_gl_max_texture_size(void) {
 	int max_size = 0;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
 	return max_size;
 }
 
-int gfx_supports_npot(void) {
+int gfx_gl_supports_npot(void) {
 	const char* ext = (const char*)glGetString(GL_EXTENSIONS);
 	return ext && strstr(ext, "ARB_texture_non_power_of_two") != NULL;
 }
 
-void gfx_texture_2d(int enabled) {
+void gfx_gl_texture_2d(int enabled) {
 	if(enabled)
 		glEnable(GL_TEXTURE_2D);
 	else
 		glDisable(GL_TEXTURE_2D);
 }
 
-void gfx_blend(int enabled) {
+void gfx_gl_blend(int enabled) {
 	if(enabled) {
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -287,7 +288,7 @@ void gfx_blend(int enabled) {
 	}
 }
 
-void gfx_draw_quads_2d(const float* xy, const float* uv, int vertex_count) {
+void gfx_gl_draw_quads_2d(const float* xy, const float* uv, int vertex_count) {
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glTexCoordPointer(2, GL_FLOAT, 0, uv);
@@ -297,7 +298,7 @@ void gfx_draw_quads_2d(const float* xy, const float* uv, int vertex_count) {
 	glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void gfx_draw_quads_2d_short(const short* xy, const short* uv, int vertex_count) {
+void gfx_gl_draw_quads_2d_short(const short* xy, const short* uv, int vertex_count) {
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 	glVertexPointer(2, GL_SHORT, 0, xy);
@@ -307,7 +308,7 @@ void gfx_draw_quads_2d_short(const short* xy, const short* uv, int vertex_count)
 	glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void gfx_mesh_create(gfx_mesh_t* m, int has_color, int has_normal) {
+void gfx_gl_mesh_create(gfx_mesh_t* m, int has_color, int has_normal) {
 	m->has_color = has_color;
 	m->has_normal = has_normal;
 
@@ -323,7 +324,7 @@ void gfx_mesh_create(gfx_mesh_t* m, int has_color, int has_normal) {
 	m->buffer_size = 0;
 }
 
-void gfx_mesh_destroy(gfx_mesh_t* m) {
+void gfx_gl_mesh_destroy(gfx_mesh_t* m) {
 #ifndef OPENGL_ES
 	if(!gfx_gl2_flag || settings.force_displaylist) {
 		glDeleteLists(m->legacy, 1);
@@ -335,7 +336,7 @@ void gfx_mesh_destroy(gfx_mesh_t* m) {
 #endif
 }
 
-void gfx_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const void* color, const void* vertex,
+void gfx_gl_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const void* color, const void* vertex,
 					 const void* normal) {
 	int grow_buffer = count > m->buffer_size;
 	m->buffer_size = max(m->buffer_size, count);
@@ -399,7 +400,7 @@ void gfx_mesh_update(gfx_mesh_t* m, size_t count, gfx_mesh_type_t type, const vo
 #endif
 }
 
-void gfx_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type) {
+void gfx_gl_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type) {
 #ifndef OPENGL_ES
 	if(!gfx_gl2_flag || settings.force_displaylist) {
 		glCallList(m->legacy);
@@ -450,7 +451,7 @@ void gfx_mesh_draw(gfx_mesh_t* m, gfx_mesh_type_t type) {
 #endif
 }
 
-void gfx_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, const void* color, const void* normal) {
+void gfx_gl_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, const void* color, const void* normal) {
 	glEnableClientState(GL_VERTEX_ARRAY);
 
 	if(normal) {
@@ -488,11 +489,11 @@ void gfx_draw_arrays(gfx_mesh_type_t type, size_t count, const void* vertex, con
 		glDisableClientState(GL_NORMAL_ARRAY);
 }
 
-void gfx_color_mask(int r, int g, int b, int a) {
+void gfx_gl_color_mask(int r, int g, int b, int a) {
 	glColorMask(r ? GL_TRUE : GL_FALSE, g ? GL_TRUE : GL_FALSE, b ? GL_TRUE : GL_FALSE, a ? GL_TRUE : GL_FALSE);
 }
 
-void gfx_pass_begin(gfx_pass_t pass) {
+void gfx_gl_pass_begin(gfx_pass_t pass) {
 	switch(pass) {
 		case GFX_PASS_WORLD_3D:
 			glEnable(GL_DEPTH_TEST);
@@ -523,7 +524,7 @@ void gfx_pass_begin(gfx_pass_t pass) {
 	}
 }
 
-void gfx_pass_end(gfx_pass_t pass) {
+void gfx_gl_pass_end(gfx_pass_t pass) {
 	switch(pass) {
 		case GFX_PASS_WORLD_3D:
 			break;
@@ -549,132 +550,132 @@ void gfx_pass_end(gfx_pass_t pass) {
 	}
 }
 
-void gfx_color3f(float r, float g, float b) {
+void gfx_gl_color3f(float r, float g, float b) {
 	gfx_track_color4f(r, g, b, 1.0F);
 	glColor3f(r, g, b);
 }
 
-void gfx_color3ub(unsigned char r, unsigned char g, unsigned char b) {
+void gfx_gl_color3ub(unsigned char r, unsigned char g, unsigned char b) {
 	gfx_track_color4f(r / 255.0F, g / 255.0F, b / 255.0F, 1.0F);
 	glColor3ub(r, g, b);
 }
 
-void gfx_color4f(float r, float g, float b, float a) {
+void gfx_gl_color4f(float r, float g, float b, float a) {
 	gfx_track_color4f(r, g, b, a);
 	glColor4f(r, g, b, a);
 }
 
-void gfx_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+void gfx_gl_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
 	gfx_track_color4f(r / 255.0F, g / 255.0F, b / 255.0F, a / 255.0F);
 	glColor4ub(r, g, b, a);
 }
 
-void gfx_get_color4f(float out[4]) {
+void gfx_gl_get_color4f(float out[4]) {
 	out[0] = gfx_current_color[0];
 	out[1] = gfx_current_color[1];
 	out[2] = gfx_current_color[2];
 	out[3] = gfx_current_color[3];
 }
 
-void gfx_line_width(float w) {
+void gfx_gl_line_width(float w) {
 	glLineWidth(w);
 }
 
-void gfx_draw_lines_2f(const float* xy_pairs, int vertex_count) {
+void gfx_gl_draw_lines_2f(const float* xy_pairs, int vertex_count) {
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glVertexPointer(2, GL_FLOAT, 0, xy_pairs);
 	glDrawArrays(GL_LINES, 0, vertex_count);
 	glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void gfx_draw_lines_3s(const short* xyz, int vertex_count) {
+void gfx_gl_draw_lines_3s(const short* xyz, int vertex_count) {
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glVertexPointer(3, GL_SHORT, 0, xyz);
 	glDrawArrays(GL_LINES, 0, vertex_count);
 	glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void gfx_depth_range_weapon(void) {
+void gfx_gl_depth_range_weapon(void) {
 	glDepthRange(0.0F, 0.05F);
 }
 
-void gfx_depth_range_reset(void) {
+void gfx_gl_depth_range_reset(void) {
 	glDepthRange(0.0F, 1.0F);
 }
 
-void gfx_depth_test(int enabled) {
+void gfx_gl_depth_test(int enabled) {
 	if(enabled)
 		glEnable(GL_DEPTH_TEST);
 	else
 		glDisable(GL_DEPTH_TEST);
 }
 
-void gfx_depth_func_notequal(void) {
+void gfx_gl_depth_func_notequal(void) {
 	glDepthFunc(GL_NOTEQUAL);
 }
 
-void gfx_depth_func_lequal(void) {
+void gfx_gl_depth_func_lequal(void) {
 	glDepthFunc(GL_LEQUAL);
 }
 
-void gfx_scissor(int x, int y, int w, int h) {
+void gfx_gl_scissor(int x, int y, int w, int h) {
 	glEnable(GL_SCISSOR_TEST);
 	glScissor(x, y, w, h);
 }
 
-void gfx_scissor_off(void) {
+void gfx_gl_scissor_off(void) {
 	glDisable(GL_SCISSOR_TEST);
 }
 
-void gfx_viewport(int x, int y, int w, int h) {
+void gfx_gl_viewport(int x, int y, int w, int h) {
 	glViewport(x, y, w, h);
 }
 
-void gfx_clear_color(float r, float g, float b, float a) {
+void gfx_gl_clear_color(float r, float g, float b, float a) {
 	glClearColor(r, g, b, a);
 }
 
-void gfx_clear(void) {
+void gfx_gl_clear(void) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void gfx_clear_color_only(void) {
+void gfx_gl_clear_color_only(void) {
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void gfx_shade_smooth(void) {
+void gfx_gl_shade_smooth(void) {
 	glShadeModel(GL_SMOOTH);
 }
 
-void gfx_shade_flat(void) {
+void gfx_gl_shade_flat(void) {
 	glShadeModel(GL_FLAT);
 }
 
-void gfx_light0_position(const float pos4[4]) {
+void gfx_gl_light0_position(const float pos4[4]) {
 	glLightfv(GL_LIGHT0, GL_POSITION, pos4);
 }
 
-void gfx_capture_framebuffer(int x, int y, int w, int h, void* out_rgba) {
+void gfx_gl_capture_framebuffer(int x, int y, int w, int h, void* out_rgba) {
 	glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, out_rgba);
 }
 
-int gfx_gl2(void) {
+int gfx_gl_gl2(void) {
 	return gfx_gl2_flag;
 }
 
-void gfx_multisample(int enabled) {
+void gfx_gl_multisample(int enabled) {
 	if(enabled)
 		glEnable(GL_MULTISAMPLE);
 	else
 		glDisable(GL_MULTISAMPLE);
 }
 
-void gfx_model_light(const float ambient4[4], const float diffuse4[4]) {
+void gfx_gl_model_light(const float ambient4[4], const float diffuse4[4]) {
 	glLightfv(GL_LIGHT0, GL_AMBIENT, ambient4);
 	glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse4);
 }
 
-void gfx_model_mesh_begin(gfx_texture_t dummy) {
+void gfx_gl_model_mesh_begin(gfx_texture_t dummy) {
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 	glEnable(GL_COLOR_MATERIAL);
@@ -697,12 +698,12 @@ void gfx_model_mesh_begin(gfx_texture_t dummy) {
 	glBindTexture(GL_TEXTURE_2D, (GLuint)dummy);
 }
 
-void gfx_model_texenv_color(float r, float g, float b) {
+void gfx_gl_model_texenv_color(float r, float g, float b) {
 	float c[4] = {r, g, b, 1.0F};
 	glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, c);
 }
 
-void gfx_model_mesh_end(void) {
+void gfx_gl_model_mesh_end(void) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glDisable(GL_TEXTURE_2D);
@@ -713,7 +714,7 @@ void gfx_model_mesh_end(void) {
 	glDisable(GL_LIGHTING);
 }
 
-void gfx_model_points_begin_fixed(float point_size) {
+void gfx_gl_model_points_begin_fixed(float point_size) {
 	glPointParameterfv(GL_POINT_DISTANCE_ATTENUATION, (float[]) {0.0F, 0.0F, 1.0F});
 	glPointSize(point_size);
 	glEnable(GL_LIGHTING);
@@ -725,7 +726,7 @@ void gfx_model_points_begin_fixed(float point_size) {
 	glEnable(GL_NORMALIZE);
 }
 
-void gfx_model_points_end_fixed(void) {
+void gfx_gl_model_points_end_fixed(void) {
 	glDisable(GL_NORMALIZE);
 	glDisable(GL_COLOR_MATERIAL);
 	glDisable(GL_LIGHT0);
@@ -783,7 +784,7 @@ static void gfx_kv6_ensure_program(void) {
 }
 #endif
 
-void gfx_model_points_begin_shader(float point_size, float dist_factor, const float fog_rgb[3], const float camera[3],
+void gfx_gl_model_points_begin_shader(float point_size, float dist_factor, const float fog_rgb[3], const float camera[3],
 								   const float model16[16]) {
 #ifndef OPENGL_ES
 	gfx_kv6_ensure_program();
@@ -803,14 +804,14 @@ void gfx_model_points_begin_shader(float point_size, float dist_factor, const fl
 #endif
 }
 
-void gfx_model_points_end_shader(void) {
+void gfx_gl_model_points_end_shader(void) {
 #ifndef OPENGL_ES
 	glUseProgram(0);
 	glDisable(GL_PROGRAM_POINT_SIZE);
 #endif
 }
 
-void gfx_fog_enable_exp2(const float color4[4], float density) {
+void gfx_gl_fog_enable_exp2(const float color4[4], float density) {
 #ifdef OPENGL_ES
 	glFogx(GL_FOG_MODE, GL_EXP2);
 #else
@@ -821,11 +822,11 @@ void gfx_fog_enable_exp2(const float color4[4], float density) {
 	glEnable(GL_FOG);
 }
 
-void gfx_fog_disable(void) {
+void gfx_gl_fog_disable(void) {
 	glDisable(GL_FOG);
 }
 
-void gfx_fog_enable_spherical(void) {
+void gfx_gl_fog_enable_spherical(void) {
 #ifndef OPENGL_ES
 	if(!settings.smooth_fog) {
 		glActiveTexture(GL_TEXTURE1);
@@ -899,7 +900,7 @@ void gfx_fog_enable_spherical(void) {
 	gfx_fog_flag = 1;
 }
 
-void gfx_fog_disable_spherical(void) {
+void gfx_gl_fog_disable_spherical(void) {
 #ifndef OPENGL_ES
 	if(!settings.smooth_fog) {
 		glActiveTexture(GL_TEXTURE1);
@@ -927,6 +928,80 @@ void gfx_fog_disable_spherical(void) {
 	gfx_fog_flag = 0;
 }
 
-int gfx_fog_active(void) {
+int gfx_gl_fog_active(void) {
 	return gfx_fog_flag;
 }
+
+#include "gfx_backend.h"
+
+const gfx_ops_t gfx_gl_ops = {
+	.apply_context_hints = gfx_gl_apply_context_hints,
+	.init = gfx_gl_init,
+	.shutdown = gfx_gl_shutdown,
+	.resize = gfx_gl_resize,
+	.swap_buffers = gfx_gl_swap_buffers,
+	.set_vsync = gfx_gl_set_vsync,
+	.matrix_projection = gfx_gl_matrix_projection,
+	.matrix_modelview = gfx_gl_matrix_modelview,
+	.matrix_texture = gfx_gl_matrix_texture,
+	.pass_begin = gfx_gl_pass_begin,
+	.pass_end = gfx_gl_pass_end,
+	.texture_create_rgba = gfx_gl_texture_create_rgba,
+	.texture_upload_rgba = gfx_gl_texture_upload_rgba,
+	.texture_create_alpha = gfx_gl_texture_create_alpha,
+	.texture_update_sub_rgba = gfx_gl_texture_update_sub_rgba,
+	.texture_set_filter = gfx_gl_texture_set_filter,
+	.texture_set_filter_wrap_bound = gfx_gl_texture_set_filter_wrap_bound,
+	.texture_bind = gfx_gl_texture_bind,
+	.texture_destroy = gfx_gl_texture_destroy,
+	.max_texture_size = gfx_gl_max_texture_size,
+	.supports_npot = gfx_gl_supports_npot,
+	.texture_2d = gfx_gl_texture_2d,
+	.blend = gfx_gl_blend,
+	.draw_quads_2d = gfx_gl_draw_quads_2d,
+	.draw_quads_2d_short = gfx_gl_draw_quads_2d_short,
+	.mesh_create = gfx_gl_mesh_create,
+	.mesh_destroy = gfx_gl_mesh_destroy,
+	.mesh_update = gfx_gl_mesh_update,
+	.mesh_draw = gfx_gl_mesh_draw,
+	.draw_arrays = gfx_gl_draw_arrays,
+	.color_mask = gfx_gl_color_mask,
+	.color3f = gfx_gl_color3f,
+	.color3ub = gfx_gl_color3ub,
+	.color4f = gfx_gl_color4f,
+	.color4ub = gfx_gl_color4ub,
+	.get_color4f = gfx_gl_get_color4f,
+	.multisample = gfx_gl_multisample,
+	.line_width = gfx_gl_line_width,
+	.draw_lines_2f = gfx_gl_draw_lines_2f,
+	.draw_lines_3s = gfx_gl_draw_lines_3s,
+	.depth_range_weapon = gfx_gl_depth_range_weapon,
+	.depth_range_reset = gfx_gl_depth_range_reset,
+	.depth_test = gfx_gl_depth_test,
+	.depth_func_notequal = gfx_gl_depth_func_notequal,
+	.depth_func_lequal = gfx_gl_depth_func_lequal,
+	.scissor = gfx_gl_scissor,
+	.scissor_off = gfx_gl_scissor_off,
+	.viewport = gfx_gl_viewport,
+	.clear_color = gfx_gl_clear_color,
+	.clear = gfx_gl_clear,
+	.clear_color_only = gfx_gl_clear_color_only,
+	.shade_smooth = gfx_gl_shade_smooth,
+	.shade_flat = gfx_gl_shade_flat,
+	.light0_position = gfx_gl_light0_position,
+	.capture_framebuffer = gfx_gl_capture_framebuffer,
+	.gl2 = gfx_gl_gl2,
+	.model_light = gfx_gl_model_light,
+	.model_mesh_begin = gfx_gl_model_mesh_begin,
+	.model_texenv_color = gfx_gl_model_texenv_color,
+	.model_mesh_end = gfx_gl_model_mesh_end,
+	.model_points_begin_fixed = gfx_gl_model_points_begin_fixed,
+	.model_points_end_fixed = gfx_gl_model_points_end_fixed,
+	.model_points_begin_shader = gfx_gl_model_points_begin_shader,
+	.model_points_end_shader = gfx_gl_model_points_end_shader,
+	.fog_enable_exp2 = gfx_gl_fog_enable_exp2,
+	.fog_disable = gfx_gl_fog_disable,
+	.fog_enable_spherical = gfx_gl_fog_enable_spherical,
+	.fog_disable_spherical = gfx_gl_fog_disable_spherical,
+	.fog_active = gfx_gl_fog_active,
+};

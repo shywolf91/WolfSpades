@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(BetterSpades C)
+project(BetterSpades C CXX)
 
 set(BETTERSPADES_MAJOR 0)
 set(BETTERSPADES_MINOR 1)
