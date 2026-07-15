@@ -691,3 +691,61 @@ src/gfx_gl.c:26:#include <GL/glew.h>
 
 **Phase 1 complete:** game code talks only to `gfx.h`; OpenGL lives solely in `gfx_gl.c`.
 
+---
+
+## Phase 2 — Vulkan backend bootstrap
+
+**Branch:** `phase-2-vulkan-bootstrap`  
+**Date:** 2026-07-14  
+**Scope:** Second gfx backend that opens a window and presents a solid clear-color frame (`--vulkan`). No world rendering, no pipelines/draws beyond clear.
+
+### Dispatch
+
+- `src/gfx.c` — thin function-pointer table dispatcher (`gfx_ops_t` in `src/gfx_backend.h`).
+- Table populated once by `gfx_select_backend()` (default GL).
+- `src/gfx_gl.c` — GL implementation renamed to `gfx_gl_*`, registered as `gfx_gl_ops`.
+- `src/gfx_vk.cpp` — C++20 Vulkan implementation + stubs, registered as `gfx_vk_ops`.
+
+### gfx.h delta
+
+| Addition | Role |
+|----------|------|
+| `gfx_backend_t` (`GFX_BACKEND_GL`, `GFX_BACKEND_VULKAN`) | Backend enum |
+| `gfx_select_backend(gfx_backend_t)` | Call before window hints / create |
+| `gfx_selected_backend(void)` | Query current selection |
+
+All other public signatures unchanged. Flag: parse `--vulkan` in `main.c` before `window_init()`.
+
+### Vulkan choices
+
+| Item | Choice |
+|------|--------|
+| API | Prefer **Vulkan 1.3** + dynamic rendering; fallback **1.2** + minimal render pass / framebuffers |
+| Present mode | `VK_PRESENT_MODE_FIFO_KHR` (vsync parity with GL default) |
+| Format | Prefer `B8G8R8A8_SRGB`, then `R8G8B8A8_SRGB`, then UNORM fallbacks |
+| Frames in flight | 2 (semaphore + fence per frame) |
+| Clear color | Dark teal `(0.05, 0.28, 0.30)` in `gfx_swap_buffers` |
+| Validation | On in Debug when `VK_LAYER_KHRONOS_validation` is available; override `BUTTERSPADES_VK_VALIDATION=0\|1`. Set `VK_LAYER_PATH` to `C:\msys64\mingw64\bin` under MSYS2. Prefer loader via PATH (do not copy only `vulkan-1.dll` beside the exe). |
+| Deps (FetchContent) | vk-bootstrap **`v1.4.356`**, VMA **`v3.3.0`** |
+| Window note | MinGW GLFW may return a NULL primary monitor after `GLFW_NO_API` create — `window_init` caches monitor mode beforehand. |
+
+### Stub worklist (Phase 3–5)
+
+Every non-lifecycle `gfx_*` entry is a no-op that logs once on first call (64 stubs):
+
+| Area | Stubs |
+|------|-------|
+| Matrices | `gfx_matrix_projection`, `gfx_matrix_modelview`, `gfx_matrix_texture` |
+| Passes | `gfx_pass_begin`, `gfx_pass_end` |
+| Textures / 2D | create/upload/alpha/sub/filter/wrap/bind/destroy, max size, npot, texture_2d, blend, draw_quads_2d(_short) |
+| Meshes | create/destroy/update/draw, `gfx_draw_arrays` |
+| Color / state | color_mask, color3/4 f/ub, get_color4f, multisample, line_width, depth_*, shade_*, light0 |
+| Lines | `gfx_draw_lines_2f`, `gfx_draw_lines_3s` |
+| Scissor / viewport | scissor, scissor_off, viewport |
+| Clear (game) | clear_color, clear, clear_color_only *(present clear is lifecycle)* |
+| Capture / capability | capture_framebuffer, gfx_gl2 |
+| Models | model_light, mesh begin/texenv/end, points fixed + shader |
+| Fog | enable_exp2, disable, spherical enable/disable, fog_active |
+
+Lifecycle implemented on Vulkan: `apply_context_hints`, `init`, `shutdown`, `resize`, `swap_buffers`, `set_vsync` (FIFO only in this phase).
+

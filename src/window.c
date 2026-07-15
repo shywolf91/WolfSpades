@@ -195,18 +195,24 @@ void window_init() {
 
 	gfx_apply_context_hints();
 
+	/* Cache monitor geometry before CreateWindow: with GLFW_NO_API (Vulkan),
+	   some MinGW GLFW builds return a NULL primary monitor afterwards. */
+	GLFWmonitor* primary = glfwGetPrimaryMonitor();
+	const GLFWvidmode* mode = primary ? glfwGetVideoMode(primary) : NULL;
+
 	hud_window->impl
 		= glfwCreateWindow(settings.window_width, settings.window_height, "BetterSpades " BETTERSPADES_VERSION,
-						   settings.fullscreen ? glfwGetPrimaryMonitor() : NULL, NULL);
+						   settings.fullscreen ? primary : NULL, NULL);
 	if(!hud_window->impl) {
 		log_fatal("Could not open window");
 		glfwTerminate();
 		exit(1);
 	}
 
-	const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-	glfwSetWindowPos(hud_window->impl, (mode->width - settings.window_width) / 2.0F,
-					 (mode->height - settings.window_height) / 2.0F);
+	if(mode) {
+		glfwSetWindowPos(hud_window->impl, (mode->width - settings.window_width) / 2.0F,
+						 (mode->height - settings.window_height) / 2.0F);
+	}
 	glfwShowWindow(hud_window->impl);
 
 	gfx_init(hud_window->impl);
@@ -231,10 +237,13 @@ void window_fromsettings() {
 	if(settings.vsync > 1)
 		window_swapping(0);
 
-	const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+	GLFWmonitor* primary = glfwGetPrimaryMonitor();
+	const GLFWvidmode* mode = primary ? glfwGetVideoMode(primary) : NULL;
+	if(!mode)
+		return;
 	if(settings.fullscreen)
-		glfwSetWindowMonitor(hud_window->impl, glfwGetPrimaryMonitor(), 0, 0, settings.window_width,
-							 settings.window_height, mode->refreshRate);
+		glfwSetWindowMonitor(hud_window->impl, primary, 0, 0, settings.window_width, settings.window_height,
+							 mode->refreshRate);
 	else
 		glfwSetWindowMonitor(hud_window->impl, NULL, (mode->width - settings.window_width) / 2,
 							 (mode->height - settings.window_height) / 2, settings.window_width, settings.window_height,
