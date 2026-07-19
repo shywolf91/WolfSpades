@@ -40,8 +40,10 @@
 #endif
 
 #ifdef __linux__
+#ifndef __EMSCRIPTEN__
 #define OS_LINUX
 #include <sys/sysinfo.h>
+#endif
 #endif
 
 #ifdef __APPLE__

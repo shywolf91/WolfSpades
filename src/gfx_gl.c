@@ -22,10 +22,20 @@
 #include <math.h>
 
 #ifndef OPENGL_ES
+#ifdef __EMSCRIPTEN__
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#include <GL/glext.h>
+#else
 #define GLEW_STATIC
 #include <GL/glew.h>
+#endif
 #else
-#ifdef USE_SDL
+#ifdef __EMSCRIPTEN__
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#include <GL/glext.h>
+#elif defined(USE_SDL)
 #include <SDL2/SDL_opengles.h>
 #endif
 #define glColor3f(r, g, b) glColor4f(r, g, b, 1.0F)
@@ -78,14 +88,25 @@ void gfx_gl_apply_context_hints(void) {
 #endif
 
 #ifdef USE_SDL
+#ifdef __EMSCRIPTEN__
+	/* WebGL2 + legacy GL emulation — request a compatibility-style context. */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+#endif
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 #ifdef OPENGL_ES
+#ifdef __EMSCRIPTEN__
+	/* WebGL2 via GLES3 profile */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 #endif
 #endif
@@ -103,6 +124,9 @@ void gfx_gl_init(void* window) {
 #endif
 
 #ifndef OPENGL_ES
+#ifdef __EMSCRIPTEN__
+	gfx_gl2_flag = 1;
+#else
 	if(glewInit())
 		log_error("Could not load extended OpenGL functions!");
 
@@ -110,6 +134,7 @@ void gfx_gl_init(void* window) {
 		const char* ver = (const char*)glGetString(GL_VERSION);
 		gfx_gl2_flag = ver ? (atoi(ver) >= 2) : 0;
 	}
+#endif
 #else
 	gfx_gl2_flag = 0;
 #endif

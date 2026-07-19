@@ -48,6 +48,51 @@
 #include "main.h"
 #include "gfx.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+void display(void);
+void reshape(struct window_instance* window, int width, int height);
+
+static double em_last_frame_start = 0.0;
+static double em_physics_time_fixed = 0.0;
+static double em_physics_time_fast = 0.0;
+
+static void main_loop_iter(void) {
+	double dt = window_time() - em_last_frame_start;
+	em_last_frame_start = window_time();
+
+	if(hud_active->render_world) {
+		em_physics_time_fast += dt;
+		em_physics_time_fixed += dt;
+
+#define PHYSICS_STEP_TIME_EM (1.0 / 60.0)
+		while(em_physics_time_fixed >= PHYSICS_STEP_TIME_EM) {
+			em_physics_time_fixed -= PHYSICS_STEP_TIME_EM;
+			player_update(PHYSICS_STEP_TIME_EM, 1);
+			grenade_update(PHYSICS_STEP_TIME_EM);
+		}
+
+		double step = fmin(dt, PHYSICS_STEP_TIME_EM);
+		while(step > 0 && em_physics_time_fast >= step) {
+			em_physics_time_fast -= step;
+			player_update(step, 0);
+			camera_update(step);
+			tracer_update(step);
+			particle_update(step);
+			map_collapsing_update(step);
+		}
+	}
+
+	display();
+	sound_update();
+	network_update();
+	window_update();
+	rpc_update();
+	fps = 1.0F / (dt > 0.0 ? dt : 0.016);
+}
+#endif
+
 int fps = 0;
 
 int ms_seed = 1;
@@ -751,6 +796,12 @@ int main(int argc, char** argv) {
 	double physics_time_fixed = 0.0F;
 	double physics_time_fast = 0.0F;
 
+#ifdef __EMSCRIPTEN__
+	(void)last_frame_start;
+	(void)physics_time_fixed;
+	(void)physics_time_fast;
+	emscripten_set_main_loop(main_loop_iter, 0, 1);
+#else
 	while(!window_closed()) {
 		double dt = window_time() - last_frame_start;
 		last_frame_start = window_time();
@@ -797,4 +848,5 @@ int main(int argc, char** argv) {
 
 		fps = 1.0F / dt;
 	}
+#endif
 }

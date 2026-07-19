@@ -1,0 +1,45 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "native-default",
+      "displayName": "Native (default GLFW)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_GLFW": "ON",
+        "ENABLE_SDL": "OFF"
+      }
+    },
+    {
+      "name": "web",
+      "displayName": "Emscripten WebGL2 spike",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/emscripten",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_SDL": "ON",
+        "ENABLE_GLFW": "OFF",
+        "ENABLE_OPENGLES": "ON",
+        "ENABLE_SOUND": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "web",
+      "configurePreset": "web"
+    },
+    {
+      "name": "native-default",
+      "configurePreset": "native-default"
+    }
+  ]
+}

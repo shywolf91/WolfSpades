@@ -19,20 +19,22 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(vxl)
 
-FetchContent_Declare(
-	vk-bootstrap
-	GIT_REPOSITORY	https://github.com/charles-lunarg/vk-bootstrap
-	GIT_TAG			v1.4.356
-)
-set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(vk-bootstrap)
+if(NOT EMSCRIPTEN)
+	FetchContent_Declare(
+		vk-bootstrap
+		GIT_REPOSITORY	https://github.com/charles-lunarg/vk-bootstrap
+		GIT_TAG			v1.4.356
+	)
+	set(VK_BOOTSTRAP_TEST OFF CACHE BOOL "" FORCE)
+	FetchContent_MakeAvailable(vk-bootstrap)
 
-FetchContent_Declare(
-	VulkanMemoryAllocator
-	GIT_REPOSITORY	https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-	GIT_TAG			v3.3.0
-)
-FetchContent_MakeAvailable(VulkanMemoryAllocator)
+	FetchContent_Declare(
+		VulkanMemoryAllocator
+		GIT_REPOSITORY	https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+		GIT_TAG			v3.3.0
+	)
+	FetchContent_MakeAvailable(VulkanMemoryAllocator)
+endif()
 
 macro(download_file_if_it_doesnt_exist filename url)
 	set(argn ${ARGN})
@@ -81,7 +83,64 @@ list(APPEND CLIENT_SOURCES file.c)
 list(APPEND CLIENT_SOURCES font.c)
 list(APPEND CLIENT_SOURCES gfx.c)
 list(APPEND CLIENT_SOURCES gfx_gl.c)
-list(APPEND CLIENT_SOURCES gfx_vk.cpp)
+if(EMSCRIPTEN)
+	list(APPEND CLIENT_SOURCES gl_emscripten_stubs.c)
+endif()
+if(NOT EMSCRIPTEN)
+	list(APPEND CLIENT_SOURCES gfx_vk.cpp)
+
+	# --- Phase 3: compile UI shaders with glslc and embed SPIR-V as C arrays ---
+	find_program(GLSLC glslc HINTS "$ENV{MSYSTEM_PREFIX}/bin" "C:/msys64/mingw64/bin")
+	if(NOT GLSLC)
+		message(FATAL_ERROR
+			"glslc not found. Install mingw-w64-x86_64-shaderc (provides glslc) and reconfigure.")
+	endif()
+	message(STATUS "glslc: ${GLSLC}")
+
+	set(SHADER_SRC_DIR ${BetterSpades_SOURCE_DIR}/shaders)
+	set(SHADER_SPV_DIR ${CMAKE_BINARY_DIR}/shaders)
+	set(SHADER_EMBED_C ${CMAKE_BINARY_DIR}/shaders_embedded.c)
+	set(SHADER_EMBED_H ${CMAKE_BINARY_DIR}/shaders_embedded.h)
+	file(MAKE_DIRECTORY ${SHADER_SPV_DIR})
+
+	set(SHADER_SOURCES
+		${SHADER_SRC_DIR}/ui.vert
+		${SHADER_SRC_DIR}/ui.frag
+	)
+	set(SHADER_SPV_FILES "")
+	# Explicit output names so EmbedSpirv symbols are ui_vert_spv / ui_frag_spv
+	set(SHADER_SPV_MAP
+		${SHADER_SRC_DIR}/ui.vert|${SHADER_SPV_DIR}/ui_vert.spv
+		${SHADER_SRC_DIR}/ui.frag|${SHADER_SPV_DIR}/ui_frag.spv
+	)
+	foreach(entry ${SHADER_SPV_MAP})
+		string(REPLACE "|" ";" pair ${entry})
+		list(GET pair 0 src)
+		list(GET pair 1 spv)
+		add_custom_command(
+			OUTPUT ${spv}
+			COMMAND ${GLSLC} -O -o ${spv} ${src}
+			DEPENDS ${src}
+			COMMENT "glslc ${spv}"
+			VERBATIM
+		)
+		list(APPEND SHADER_SPV_FILES ${spv})
+	endforeach()
+	add_custom_command(
+		OUTPUT ${SHADER_EMBED_C} ${SHADER_EMBED_H}
+		COMMAND ${CMAKE_COMMAND}
+			-DOUT_C=${SHADER_EMBED_C}
+			-DOUT_H=${SHADER_EMBED_H}
+			"-DSPV_FILES=${SHADER_SPV_FILES}"
+			-P ${BetterSpades_SOURCE_DIR}/cmake/EmbedSpirv.cmake
+		DEPENDS ${SHADER_SPV_FILES} ${BetterSpades_SOURCE_DIR}/cmake/EmbedSpirv.cmake
+		COMMENT "Embedding SPIR-V shaders into shaders_embedded.c"
+		VERBATIM
+	)
+	list(APPEND CLIENT_SOURCES ${SHADER_EMBED_C})
+	# Ensure the embed outputs rebuild with the target
+	set_source_files_properties(${SHADER_EMBED_C} PROPERTIES GENERATED TRUE)
+endif()
 list(APPEND CLIENT_SOURCES grenade.c)
 list(APPEND CLIENT_SOURCES http.c)
 list(APPEND CLIENT_SOURCES gmi.c)
@@ -93,6 +152,11 @@ list(APPEND CLIENT_SOURCES map.c)
 list(APPEND CLIENT_SOURCES matrix.c)
 list(APPEND CLIENT_SOURCES model.c)
 list(APPEND CLIENT_SOURCES network.c)
+if(EMSCRIPTEN)
+	list(APPEND CLIENT_SOURCES net_transport_null.c)
+else()
+	list(APPEND CLIENT_SOURCES net_transport_enet.c)
+endif()
 list(APPEND CLIENT_SOURCES parson.c)
 list(APPEND CLIENT_SOURCES particle.c)
 list(APPEND CLIENT_SOURCES player.c)
@@ -112,9 +176,15 @@ list(APPEND CLIENT_SOURCES tesselator.c)
 list(APPEND CLIENT_SOURCES microui.c)
 list(APPEND CLIENT_SOURCES channel.c)
 list(APPEND CLIENT_SOURCES entitysystem.c)
-list(APPEND CLIENT_SOURCES ${BetterSpades_SOURCE_DIR}/resources/icon.rc)
+if(NOT EMSCRIPTEN)
+	list(APPEND CLIENT_SOURCES ${BetterSpades_SOURCE_DIR}/resources/icon.rc)
+endif()
 
 add_executable(client ${CLIENT_SOURCES})
+
+if(EMSCRIPTEN)
+	set_target_properties(client PROPERTIES OUTPUT_NAME "rl")
+endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set_property(TARGET client PROPERTY WIN32_EXECUTABLE true)
@@ -133,7 +203,7 @@ execute_process(
 include(CheckIPOSupported)
 check_ipo_supported(RESULT lto_supported OUTPUT error)
 
-if(lto_supported AND CMAKE_BUILD_TYPE STREQUAL "Release")
+if(NOT EMSCRIPTEN AND lto_supported AND CMAKE_BUILD_TYPE STREQUAL "Release")
 	message(STATUS "IPO / LTO enabled")
 	set_property(TARGET client PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 else()
@@ -165,6 +235,13 @@ set_target_properties(
 	CXX_STANDARD_REQUIRED ON
 )
 
+if(EMSCRIPTEN)
+	set_target_properties(
+		client PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY ${BetterSpades_SOURCE_DIR}/build/web
+	)
+endif()
+
 set(CMAKE_PREFIX_PATH  ${CMAKE_PREFIX_PATH} ${BetterSpades_SOURCE_DIR}/deps)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${BetterSpades_SOURCE_DIR}/cmake/Modules)
 set(OpenGL_GL_PREFERENCE LEGACY)
@@ -174,32 +251,56 @@ if(ENABLE_GLFW)
 	target_compile_definitions(client PRIVATE USE_GLFW)
 endif()
 if(ENABLE_SDL)
-	find_package(SDL2 REQUIRED)
-	target_link_libraries(client ${SDL2_LIBRARY})
-	target_compile_definitions(client PRIVATE USE_SDL)
+	if(EMSCRIPTEN)
+		target_compile_definitions(client PRIVATE USE_SDL)
+	else()
+		find_package(SDL2 REQUIRED)
+		target_link_libraries(client ${SDL2_LIBRARY})
+		target_compile_definitions(client PRIVATE USE_SDL)
+	endif()
 endif()
 if(ENABLE_SOUND)
 	find_package(OpenAL REQUIRED)
 	target_link_libraries(client ${OPENAL_LIBRARY})
 	target_compile_definitions(client PRIVATE USE_SOUND)
 endif()
-find_package(enet REQUIRED)
-find_package(deflate REQUIRED)
+
+if(NOT EMSCRIPTEN)
+	find_package(enet REQUIRED)
+	find_package(deflate REQUIRED)
+else()
+	FetchContent_Declare(
+		libdeflate
+		GIT_REPOSITORY https://github.com/ebiggers/libdeflate
+		GIT_TAG v1.22
+	)
+	set(LIBDEFLATE_BUILD_STATIC_LIB ON CACHE BOOL "" FORCE)
+	set(LIBDEFLATE_BUILD_SHARED_LIB OFF CACHE BOOL "" FORCE)
+	set(LIBDEFLATE_BUILD_GZIP OFF CACHE BOOL "" FORCE)
+	FetchContent_MakeAvailable(libdeflate)
+	add_library(deflate::deflate ALIAS libdeflate_static)
+endif()
 find_package(Threads REQUIRED)
 if(NOT ENABLE_OPENGLES)
-	find_package(OpenGL REQUIRED)
-	find_package(GLEW REQUIRED)
-	target_link_libraries(client GLEW::GLEW)
+	if(NOT EMSCRIPTEN)
+		find_package(OpenGL REQUIRED)
+		find_package(GLEW REQUIRED)
+		target_link_libraries(client GLEW::GLEW)
+	endif()
 else()
-	find_package(OpenGL REQUIRED COMPONENTS EGL)
-	target_link_libraries(client OpenGL::EGL)
+	if(NOT EMSCRIPTEN)
+		find_package(OpenGL REQUIRED COMPONENTS EGL)
+		target_link_libraries(client OpenGL::EGL)
+	endif()
 	target_compile_definitions(client PRIVATE OPENGL_ES)
 endif()
 
-# Vulkan loader + headers via CMake's FindVulkan (MSYS2: mingw-w64-x86_64-vulkan-loader / vulkan-headers).
-find_package(Vulkan REQUIRED)
-target_link_libraries(client Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
-target_include_directories(client PRIVATE ${vulkanmemoryallocator_SOURCE_DIR}/include)
+if(NOT EMSCRIPTEN)
+	# Vulkan loader + headers via CMake's FindVulkan (MSYS2: mingw-w64-x86_64-vulkan-loader / vulkan-headers).
+	find_package(Vulkan REQUIRED)
+	target_link_libraries(client Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
+	target_include_directories(client PRIVATE ${vulkanmemoryallocator_SOURCE_DIR}/include)
+endif()
 if(ENABLE_RPC)
 	target_link_libraries(client discord-rpc stdc++)
 	target_compile_definitions(client PRIVATE USE_RPC DISCORD_DISABLE_IO_THREAD)
@@ -209,41 +310,95 @@ if(DEFINED ENV{BUILD_NUMBER})
 endif()
 
 
-if(WIN32)
+if(WIN32 AND NOT EMSCRIPTEN)
 	target_compile_definitions(client PRIVATE LIBDEFLATE_STATIC)
 endif()
 
-target_link_libraries(client ${CMAKE_THREAD_LIBS_INIT} ${OPENGL_LIBRARIES} enet::enet deflate::deflate m cglm vxl)
-target_include_directories(client PRIVATE ${OPENAL_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR} ${OPENGL_EGL_INCLUDE_DIRS})
+if(EMSCRIPTEN)
+	target_link_libraries(client ${CMAKE_THREAD_LIBS_INIT} deflate::deflate m cglm vxl)
+	target_include_directories(client PRIVATE ${CMAKE_BINARY_DIR})
+	# Ports must be enabled at compile-time so headers (SDL2/SDL.h) resolve.
+	target_compile_options(client PRIVATE
+		"SHELL:-sUSE_SDL=2"
+		"SHELL:-sLEGACY_GL_EMULATION=1"
+	)
 
-add_custom_command(
-	TARGET client
-	POST_BUILD
-	COMMENT "Copying resources..."
-	COMMAND ${CMAKE_COMMAND} -E copy_directory ${BetterSpades_SOURCE_DIR}/resources ${BetterSpades_SOURCE_DIR}/build/BetterSpades
-)
+	# Stage assets into MEMFS (mirrors aoscam rl.data layout intent).
+	set(WEB_ASSET_ROOT ${CMAKE_BINARY_DIR}/web_assets)
+	file(MAKE_DIRECTORY ${WEB_ASSET_ROOT})
+	add_custom_command(
+		TARGET client PRE_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${BetterSpades_SOURCE_DIR}/resources ${WEB_ASSET_ROOT}
+		COMMAND ${CMAKE_COMMAND} -E tar xzf ${BetterSpades_SOURCE_DIR}/bsresources.zip
+		WORKING_DIRECTORY ${WEB_ASSET_ROOT}
+		COMMENT "Staging web assets for --preload-file"
+		VERBATIM
+	)
 
-add_custom_command(
-	TARGET client
-	POST_BUILD
-	COMMENT "Extracting additional third-party assets..."
-	DEPENDS ${BetterSpades_SOURCE_DIR}/bsresources.zip
-	WORKING_DIRECTORY ${BetterSpades_SOURCE_DIR}/build/BetterSpades
-	COMMAND ${CMAKE_COMMAND} -E tar xzf ${BetterSpades_SOURCE_DIR}/bsresources.zip
-)
+	target_link_options(client PRIVATE
+		"SHELL:-sUSE_SDL=2"
+		"SHELL:-sMIN_WEBGL_VERSION=2"
+		"SHELL:-sMAX_WEBGL_VERSION=2"
+		"SHELL:-sLEGACY_GL_EMULATION=1"
+		"SHELL:-sALLOW_MEMORY_GROWTH=1"
+		"SHELL:-sMODULARIZE=1"
+		"SHELL:-sEXPORT_NAME=createRlModule"
+		"SHELL:-sENVIRONMENT=web"
+		"SHELL:-sFORCE_FILESYSTEM=1"
+		"SHELL:--preload-file ${WEB_ASSET_ROOT}/fonts@/fonts"
+		"SHELL:--preload-file ${WEB_ASSET_ROOT}/kv6@/kv6"
+		"SHELL:--preload-file ${WEB_ASSET_ROOT}/png@/png"
+		"SHELL:--preload-file ${WEB_ASSET_ROOT}/wav@/wav"
+		"SHELL:--preload-file ${WEB_ASSET_ROOT}/config.ini@/config.ini"
+	)
 
-add_custom_command(
-	TARGET client
-	POST_BUILD
-	COMMENT "Copying overrides..."
-	COMMAND ${CMAKE_COMMAND} -E copy_directory ${BetterSpades_SOURCE_DIR}/resources.override ${BetterSpades_SOURCE_DIR}/build/BetterSpades
-)
+	# Produce rl.js / rl.wasm / rl.data next to a hand-written HTML loader.
+	set_target_properties(client PROPERTIES
+		SUFFIX ".js"
+	)
 
+	add_custom_command(
+		TARGET client POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			${BetterSpades_SOURCE_DIR}/web/rl.html
+			${BetterSpades_SOURCE_DIR}/build/web/rl.html
+		COMMENT "Copying web/rl.html shell"
+	)
+else()
+	target_link_libraries(client ${CMAKE_THREAD_LIBS_INIT} ${OPENGL_LIBRARIES} enet::enet deflate::deflate m cglm vxl)
+	target_include_directories(client PRIVATE ${OPENAL_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR} ${OPENGL_EGL_INCLUDE_DIRS} ${CMAKE_BINARY_DIR})
+
+	add_custom_command(
+		TARGET client
+		POST_BUILD
+		COMMENT "Copying resources..."
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${BetterSpades_SOURCE_DIR}/resources ${BetterSpades_SOURCE_DIR}/build/BetterSpades
+	)
+
+	add_custom_command(
+		TARGET client
+		POST_BUILD
+		COMMENT "Extracting additional third-party assets..."
+		DEPENDS ${BetterSpades_SOURCE_DIR}/bsresources.zip
+		WORKING_DIRECTORY ${BetterSpades_SOURCE_DIR}/build/BetterSpades
+		COMMAND ${CMAKE_COMMAND} -E tar xzf ${BetterSpades_SOURCE_DIR}/bsresources.zip
+	)
+
+	add_custom_command(
+		TARGET client
+		POST_BUILD
+		COMMENT "Copying overrides..."
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${BetterSpades_SOURCE_DIR}/resources.override ${BetterSpades_SOURCE_DIR}/build/BetterSpades
+	)
+endif()
+
+if(NOT EMSCRIPTEN)
 install(
 	TARGETS client
 	RUNTIME
 	DESTINATION .
 )
+
 
 install(
 	FILES "${CMAKE_BINARY_DIR}/BetterSpades/config.ini" "${CMAKE_BINARY_DIR}/BetterSpades/OpenAL32.dll"
@@ -306,3 +461,4 @@ set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 set(CPACK_PACKAGE_CHECKSUM SHA256)
 
 INCLUDE(CPack)
+endif() # NOT EMSCRIPTEN (install/cpack)

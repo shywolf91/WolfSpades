@@ -13,6 +13,9 @@ option(ENABLE_GLFW "Build against GLFW3 backend" ON)
 option(ENABLE_SOUND "Enable sound support using OpenAL" ON)
 option(ENABLE_RPC "Enable Discord Rich Presence support" OFF)
 
+if(EMSCRIPTEN)
+	include(${CMAKE_SOURCE_DIR}/cmake/EmscriptenOptions.cmake)
+endif()
 
 if((ENABLE_ANDROID_FILE OR ENABLE_TOUCH OR ENABLE_OPENGLES) AND NOT ENABLE_SDL)
 	message(FATAL_ERROR "Enable SDL to use ENABLE_ANDROID_FILE, ENABLE_TOUCH or ENABLE_OPENGLES")
@@ -26,6 +29,7 @@ endif()
 
 message(STATUS "Compiler is ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
+message(STATUS "Emscripten: ${EMSCRIPTEN}")
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	if(CMAKE_BUILD_TYPE STREQUAL "Release")

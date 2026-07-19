@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <title>BetterSpades (WASM spike)</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; display: flex; background: #2e3440; color: #eceff4; overflow: hidden; }
+    #loader { background: #3b4252; margin: auto; padding: 4rem; }
+    canvas { margin: auto; border: 0 none; background-color: #000; }
+  </style>
+</head>
+<body>
+  <noscript>JavaScript, WebGL2 and WebAssembly must be enabled.</noscript>
+  <div id="loader"><span id="status">Downloading...</span><progress id="progress" max="100" value="0"></progress></div>
+  <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <script>
+    "use strict";
+    const statusElem = document.getElementById("status");
+    const progress = document.getElementById("progress");
+    const loader = document.getElementById("loader");
+    const canvas = document.getElementById("canvas");
+
+    const gl = canvas.getContext("webgl2", {
+      alpha: false,
+      depth: true,
+      stencil: false,
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+    if (!gl) {
+      statusElem.textContent = "No WebGL2?";
+      console.error("WebGL2 context unavailable");
+    } else {
+      gl.clearColor(0.18, 0.20, 0.25, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      console.log("WebGL2 clear-color frame ok");
+    }
+
+    canvas.addEventListener("webglcontextlost", (e) => {
+      alert("WebGL context lost. Reload the page.");
+      e.preventDefault();
+    }, false);
+
+    var Module = {
+      canvas: canvas,
+      preinitializedWebGLContext: gl || undefined,
+      print: (...args) => console.log(...args),
+      printErr: (...args) => console.error(...args),
+      setStatus(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: "" };
+        if (text === Module.setStatus.last.text) return;
+        const m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+        const now = Date.now();
+        if (m && now - Module.setStatus.last.time < 30) return;
+        Module.setStatus.last.time = now;
+        Module.setStatus.last.text = text;
+        if (m) {
+          progress.value = 100 * parseInt(m[2], 10);
+          progress.max = 100 * parseInt(m[4], 10);
+          progress.hidden = false;
+          canvas.hidden = true;
+          loader.hidden = false;
+          statusElem.innerHTML = text;
+        } else {
+          progress.hidden = true;
+          canvas.hidden = false;
+          loader.hidden = true;
+        }
+      },
+      totalDependencies: 0,
+      monitorRunDependencies(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left
+          ? "Preparing... (" + (this.totalDependencies - left) + "/" + this.totalDependencies + ")"
+          : "All downloads complete.");
+      },
+      onRuntimeInitialized() {
+        console.log("WASM runtime initialized (WebGL2 spike)");
+      }
+    };
+    Module.setStatus("Downloading...");
+    window.onerror = () => {
+      Module.setStatus("Exception thrown, see JavaScript console");
+    };
+  </script>
+  <script async src="rl.js" onload="createRlModule(Module).then(function () { console.log('createRlModule ok'); }).catch(function (e) { console.error(e); statusElem.textContent = String(e); loader.hidden = false; });"></script>
+</body>
+</html>

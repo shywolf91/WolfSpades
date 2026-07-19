@@ -27,7 +27,9 @@ static gfx_backend_t gfx_backend = GFX_BACKEND_GL;
 void gfx_select_backend(gfx_backend_t backend) {
 	gfx_backend = backend;
 	switch(backend) {
+#ifndef __EMSCRIPTEN__
 		case GFX_BACKEND_VULKAN: gfx_ops = &gfx_vk_ops; break;
+#endif
 		case GFX_BACKEND_GL:
 		default: gfx_ops = &gfx_gl_ops; gfx_backend = GFX_BACKEND_GL; break;
 	}
