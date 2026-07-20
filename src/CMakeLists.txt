@@ -106,12 +106,18 @@ if(NOT EMSCRIPTEN)
 	set(SHADER_SOURCES
 		${SHADER_SRC_DIR}/ui.vert
 		${SHADER_SRC_DIR}/ui.frag
+		${SHADER_SRC_DIR}/ui_nametag.frag
+		${SHADER_SRC_DIR}/world.vert
+		${SHADER_SRC_DIR}/world.frag
 	)
 	set(SHADER_SPV_FILES "")
-	# Explicit output names so EmbedSpirv symbols are ui_vert_spv / ui_frag_spv
+	# Explicit output names so EmbedSpirv symbols match (ui_vert_spv, world_vert_spv, …)
 	set(SHADER_SPV_MAP
 		${SHADER_SRC_DIR}/ui.vert|${SHADER_SPV_DIR}/ui_vert.spv
 		${SHADER_SRC_DIR}/ui.frag|${SHADER_SPV_DIR}/ui_frag.spv
+		${SHADER_SRC_DIR}/ui_nametag.frag|${SHADER_SPV_DIR}/ui_nametag_frag.spv
+		${SHADER_SRC_DIR}/world.vert|${SHADER_SPV_DIR}/world_vert.spv
+		${SHADER_SRC_DIR}/world.frag|${SHADER_SPV_DIR}/world_frag.spv
 	)
 	foreach(entry ${SHADER_SPV_MAP})
 		string(REPLACE "|" ";" pair ${entry})

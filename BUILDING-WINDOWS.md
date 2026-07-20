@@ -29,8 +29,9 @@ Vulkan notes:
 - A GPU with a working ICD is required to run `client.exe --vulkan` (the Windows
   Vulkan Runtime / vendor driver). Headers + loader packages alone are not enough.
 - **shaderc** provides `glslc`, required at configure/build time to compile
-  `shaders/ui.vert` and `shaders/ui.frag`. CMake embeds the resulting SPIR-V as C
-  arrays (`shaders_embedded.c`) via `cmake/EmbedSpirv.cmake` — no runtime shader
+  `shaders/ui.vert` / `ui.frag` / `ui_nametag.frag` and `shaders/world.vert` /
+  `world.frag`. CMake embeds the resulting SPIR-V as C arrays
+  (`shaders_embedded.c`) via `cmake/EmbedSpirv.cmake` — no runtime shader
   files beside the exe.
 - Validation layers: enabled automatically in Debug builds. Override with
   `BUTTERSPADES_VK_VALIDATION=0` (force off) or `=1` (force on, including Release).
