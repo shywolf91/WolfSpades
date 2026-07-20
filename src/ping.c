@@ -17,6 +17,29 @@
 	along with BetterSpades.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "ping.h"
+#include "common.h"
+
+#ifdef __EMSCRIPTEN__
+
+void ping_init() { }
+void ping_deinit() { }
+void* ping_update(void* data) {
+	(void)data;
+	return NULL;
+}
+void ping_check(char* addr, int port, char* aos) {
+	(void)addr;
+	(void)port;
+	(void)aos;
+}
+void ping_start(void (*result)(void*, float, char*)) {
+	(void)result;
+}
+void ping_stop() { }
+
+#else
+
 #include <enet/enet.h>
 #include <pthread.h>
 #include <math.h>
@@ -24,8 +47,6 @@
 #include <string.h>
 
 #include "window.h"
-#include "ping.h"
-#include "common.h"
 #include "parson.h"
 #include "list.h"
 #include "hud.h"
@@ -196,3 +217,5 @@ void ping_start(void (*result)(void*, float, char*)) {
 void ping_stop() {
 	channel_clear(&ping_queue);
 }
+
+#endif

@@ -23,6 +23,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum {
+	GFX_BACKEND_GL = 0,
+	GFX_BACKEND_VULKAN = 1,
+} gfx_backend_t;
+
+/* Select backend before gfx_apply_context_hints / window creation. Default: GL. */
+void gfx_select_backend(gfx_backend_t backend);
+gfx_backend_t gfx_selected_backend(void);
+
 void gfx_apply_context_hints(void);
 void gfx_init(void* window);
 void gfx_shutdown(void);

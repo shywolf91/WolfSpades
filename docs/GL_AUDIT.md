@@ -691,3 +691,160 @@ src/gfx_gl.c:26:#include <GL/glew.h>
 
 **Phase 1 complete:** game code talks only to `gfx.h`; OpenGL lives solely in `gfx_gl.c`.
 
+---
+
+## Phase 2 — Vulkan backend bootstrap
+
+**Branch:** `phase-2-vulkan-bootstrap`  
+**Date:** 2026-07-14  
+**Scope:** Second gfx backend that opens a window and presents a solid clear-color frame (`--vulkan`). No world rendering, no pipelines/draws beyond clear.
+
+### Dispatch
+
+- `src/gfx.c` — thin function-pointer table dispatcher (`gfx_ops_t` in `src/gfx_backend.h`).
+- Table populated once by `gfx_select_backend()` (default GL).
+- `src/gfx_gl.c` — GL implementation renamed to `gfx_gl_*`, registered as `gfx_gl_ops`.
+- `src/gfx_vk.cpp` — C++20 Vulkan implementation + stubs, registered as `gfx_vk_ops`.
+
+### gfx.h delta
+
+| Addition | Role |
+|----------|------|
+| `gfx_backend_t` (`GFX_BACKEND_GL`, `GFX_BACKEND_VULKAN`) | Backend enum |
+| `gfx_select_backend(gfx_backend_t)` | Call before window hints / create |
+| `gfx_selected_backend(void)` | Query current selection |
+
+All other public signatures unchanged. Flag: parse `--vulkan` in `main.c` before `window_init()`.
+
+### Vulkan choices
+
+| Item | Choice |
+|------|--------|
+| API | Prefer **Vulkan 1.3** + dynamic rendering; fallback **1.2** + minimal render pass / framebuffers |
+| Present mode | `VK_PRESENT_MODE_FIFO_KHR` (vsync parity with GL default) |
+| Format | Prefer **UNORM** (`B8G8R8A8_UNORM`, then `R8G8B8A8_UNORM`) for visual parity with GL’s non-sRGB default framebuffer *(Phase 3 changed from sRGB-first)* |
+| Frames in flight | 2 (semaphore + fence per frame) |
+| Clear color | Game-driven via `gfx_clear_color` (menu uses fog clear; UI covers full window) |
+| Validation | On in Debug when `VK_LAYER_KHRONOS_validation` is available; override `BUTTERSPADES_VK_VALIDATION=0\|1`. Set `VK_LAYER_PATH` to `C:\msys64\mingw64\bin` under MSYS2. Prefer loader via PATH (do not copy only `vulkan-1.dll` beside the exe). |
+| Deps (FetchContent) | vk-bootstrap **`v1.4.356`**, VMA **`v3.3.0`** |
+| Window note | MinGW GLFW may return a NULL primary monitor after `GLFW_NO_API` create — `window_init` caches monitor mode beforehand. |
+
+### Stub worklist (updated by Phase 4)
+
+**Implemented in Phase 3 (2D/UI):** matrices (proj/MV/texture scale), `GFX_PASS_UI_2D`, textures (RGBA+ALPHA expand, upload/sub/filter/wrap/bind/destroy), `max_texture_size` / NPOT, `texture_2d`, blend, `draw_quads_2d` / `_short`, `draw_lines_2f`, color3/4 f/ub + get, scissor/viewport, clear_color / clear / clear_color_only.
+
+**Implemented in Phase 4 (world):** depth attachment, GL→VK Z remap, `mesh_*`, `draw_arrays`, `draw_lines_3s`, world/pass pipelines, fog (spherical + EXP2), `color_mask` (all-on / all-off), `depth_range_weapon` / `reset`, deferred deletion (meshes + textures).
+
+**Still stubbed (Phase 5+, log-once):**
+
+| Area | Stubs |
+|------|-------|
+| Misc state | multisample, shade_*, light0 *(line_width stored/ignored; lines fixed 1.0)* |
+| Depth overlay (HUD netstat) | `depth_test`, `depth_func_notequal` / `lequal` |
+| Capture / capability | capture_framebuffer, gfx_gl2 (=0) |
+| Models (kv6) | model_light, mesh begin/texenv/end, points fixed + shader |
+
+Lifecycle implemented on Vulkan: `apply_context_hints`, `init`, `shutdown`, `resize`, `swap_buffers`, `set_vsync` (FIFO only).
+
+---
+
+## Phase 3 — Vulkan 2D/UI pipeline
+
+**Branch:** `phase-3-vulkan-2d`  
+**Date:** 2026-07-14  
+**Scope:** Under `--vulkan`, main menu / settings / server list render and navigate with visual parity to GL. World/3D remains stubbed.
+
+### Decisions
+
+| Item | Choice |
+|------|--------|
+| Shader embed | `glslc` → `.spv` at build → `cmake/EmbedSpirv.cmake` hex → `shaders_embedded.c/h` linked into `client` |
+| Quad strategy | No expansion — game already sends triangle lists |
+| Descriptors | One combined-image-sampler set per texture; free-list pools; 4 samplers (nearest/linear × repeat/clamp); filter changes deferred to frame begin after fence wait |
+| sRGB | **UNORM** swapchain + `R8G8B8A8_UNORM` textures (match GL) |
+| Y flip | Negative viewport height only (same ortho matrices as GL); scissor converts GL bottom-left → VK top-left |
+| ALPHA fonts | Expand A→`RGBA(255,255,255,A)` at upload |
+| Untextured draws | Automatic 1×1 white texture when unbound / `texture_2d` off |
+| `color_mask` | Remains stubbed (netstat / collapsing map only) |
+
+### New / touched files
+
+- `shaders/ui.vert`, `shaders/ui.frag`
+- `cmake/EmbedSpirv.cmake`, `src/CMakeLists.txt` (glslc + embed)
+- `src/gfx_vk.cpp` (UI pipelines, textures, batcher, lazy frame begin)
+- Docs: this section; `BUILDING-WINDOWS.md` (shaderc package)
+
+**Untouched:** `gfx.h`, `gfx.c`, `gfx_gl.c`, game code.
+
+---
+
+## Phase 4 — Vulkan world rendering
+
+**Branch:** `phase-4-vulkan-world`  
+**Date:** 2026-07-19  
+**Scope:** Under `--vulkan`, joining a server renders terrain/water/fog/outline/damage/collapse/particles. Models/kv6 stay stubbed (players invisible). GL backend and game code untouched.
+
+### Pass → pipeline table
+
+| Pipeline | Topology | Depth test/write | Compare | Blend | Color write | Notes |
+|----------|----------|------------------|---------|-------|-------------|-------|
+| `world_opaque` | tris | on/on | LEQUAL | off | RGBA | `GFX_PASS_WORLD_3D` |
+| `world_outline` | lines | off/off | — | off | RGBA | `GFX_PASS_BLOCK_OUTLINE` |
+| `world_damaged` | tris | on/on | EQUAL | on | RGBA | `GFX_PASS_DAMAGED` |
+| `world_collapse` | tris | on/on | LEQUAL | on | RGBA | collapsing, mask on |
+| `world_collapse_depth` | tris | on/on | LEQUAL | off | none | collapsing depth pre-pass |
+| `ui_nametag` | tris (UI verts) | off/off | — | on | RGBA | discard if `a ≤ 0.5` |
+| existing `ui_*` | — | off | — | — | RGBA | `GFX_PASS_UI_2D` |
+
+Weapon depth range: dynamic viewport `maxDepth` 0.05 / 1.0 (not a separate pipeline).
+
+### Mesh layouts
+
+| Layout | Pos | Color | Callers |
+|--------|-----|-------|---------|
+| A | short3 | ubyte4 | chunks |
+| B | float3 | ubyte4 | collapsing, particles, damaged |
+| C | short3 lines | current color | block outline |
+
+Quads expanded to triangle lists at upload. Normals ignored (model-only). Persistent meshes: host-visible VMA buffers; **new buffer per `mesh_update`**, old retired (perf TODO: ring). Transient 3D: per-frame world VB.
+
+### Fog
+
+- **Spherical:** `f = clamp(length(xz - cam_xz) / render_distance, 0, 1)`; mix toward `fog_color`.
+- **EXP2:** `f = exp(-(density * eyeDist)^2)`; `C = f*Cin + (1-f)*Cfog`.
+- Model/fog params in a 112-byte std140 UBO; MVP remains a 64-byte push constant.
+
+### Depth / clip
+
+- Depth: `D32_SFLOAT` (fallback `D24_UNORM_S8_UINT`), recreated with swapchain.
+- GL→VK Z: clip matrix in `rebuild_mvp` (`clip[10]=clip[14]=0.5`). Y: negative viewport height (Phase 3).
+
+### Deferred deletion
+
+Global `pending_retire` with `free_after_serial = frame_serial + frames_in_flight`. Covers mesh buffers, texture images/views, and descriptor sets (dsets freed before views). Fixes mid-frame font atlas rebuild validation errors.
+
+### Validation
+
+Live server (`aos://74.91.124.129:32000`) with `BUTTERSPADES_VK_VALIDATION=1`: ~90s play, **zero** `[vk] ERROR` lines after retire fix. Expected model stubs only.
+
+### Phase 4.1 — mesh update path (2026-07-19)
+
+**Symptoms:** intermittent missing chunks while moving; hitchy movement under `--vulkan` (absent on GL). Correlated with `gfx_mesh_update` storms (map load / block edits / rebuild waves).
+
+**Instrumentation:** `BUTTERSPADES_VK_STATS=1` logs once/sec: upd/f, alloc/f, bytes/f, retire_max, same_frame_draw/f, inplace/f, pool hit rate, pool_bytes.
+
+**Before (no pool):** map-load ~112 upd/f and ~112 alloc/f (~4 MB/f); remesh waves ~17 upd/f ≈ 17 alloc/f (~1.5 MB/f). `same_frame_draw ≈ upd` (new buffer bound same frame — Hypothesis B OK). `HOST_COHERENT=1` (Hypothesis C OK; flush retained as belt-and-suspenders). Retire flush already after fence wait (Hypothesis A ordering correct; documented in `RetireResource` comment).
+
+**Fix:** size-bucketed 64 MB mesh buffer recycle pool + in-place rewrite when `bytes ≤ capacity` and `last_used_serial ≤ frame_serial - FIF`. Empty updates no longer destroy the GPU buffer.
+
+**After:** remesh waves ~17 upd/f with **alloc/f → 0** and **pool_hit 88–100%**; steady-state alloc/f=0. ~2 min live, zero validation errors.
+
+### New / touched files
+
+- `shaders/world.vert`, `shaders/world.frag`, `shaders/ui_nametag.frag`
+- `src/CMakeLists.txt` (shader list)
+- `src/gfx_vk.cpp`
+- Docs: this section; `BUILDING-WINDOWS.md` (shader list)
+
+**Untouched:** `gfx.h`, `gfx.c`, `gfx_gl.c`, game code.
+

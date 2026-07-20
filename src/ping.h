@@ -20,6 +20,7 @@
 #ifndef PING_H
 #define PING_H
 
+#ifndef __EMSCRIPTEN__
 #include <enet/enet.h>
 
 struct ping_entry {
@@ -28,6 +29,13 @@ struct ping_entry {
 	float time_start;
 	int trycount;
 };
+#else
+struct ping_entry {
+	char aos[64];
+	float time_start;
+	int trycount;
+};
+#endif
 
 void ping_init();
 void ping_deinit();

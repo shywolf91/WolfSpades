@@ -496,8 +496,10 @@ void map_init() {
 	channel_create(&map_work_queue, sizeof(struct map_work_packet), 16);
 	channel_create(&map_result_queue, sizeof(struct map_collapsing), 16);
 
+#ifndef __EMSCRIPTEN__
 	pthread_t worker;
 	pthread_create(&worker, NULL, falling_blocks_worker, NULL);
+#endif
 }
 
 int map_height_at(int x, int z) {

@@ -17,7 +17,6 @@
 	along with BetterSpades.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <enet/enet.h>
 #include <math.h>
 #include <string.h>
 
@@ -39,6 +38,7 @@
 #include "chunk.h"
 #include "gmi.h"
 #include "config.h"
+#include "net_transport.h"
 
 void (*packets[256])(void* data, int len) = {NULL};
 
@@ -64,14 +64,10 @@ int compressed_chunk_data_estimate = 0;
 struct network_stat network_stats[40];
 float network_stats_last = 0.0F;
 
-ENetHost* client;
-ENetPeer* peer;
-
 char network_custom_reason[17];
 
 void network_init_host() {
-	client = enet_host_create(NULL, 1, 1, 0, 0); // limit bandwidth here if you want to
-	enet_host_compress_with_range_coder(client);
+	net_transport_open();
 }
 
 static inline char team_color_char(int team) {
@@ -869,17 +865,18 @@ void read_PacketVersionGet(void* data, int len) {
 	ver.minor = BETTERSPADES_MINOR;
 	ver.revision = BETTERSPADES_PATCH;
 #ifndef OPENGL_ES
-#ifdef OS_WINDOWS
+#ifdef __EMSCRIPTEN__
+	char* os = "ButterSpades (Web) " BS_VER_INFO;
+#elif defined(OS_WINDOWS)
 	char* os = "ButterSpades (Windows) " BS_VER_INFO;
-#endif
-#ifdef OS_LINUX
+#elif defined(OS_LINUX)
 	char* os = "ButterSpades (Linux) " BS_VER_INFO;
-#endif
-#ifdef OS_APPLE
+#elif defined(OS_APPLE)
 	char* os = "ButterSpades (Apple) " BS_VER_INFO;
-#endif
-#ifdef OS_HAIKU
+#elif defined(OS_HAIKU)
 	char* os = "ButterSpades (Haiku) " BS_VER_INFO;
+#else
+	char* os = "ButterSpades (Unknown) " BS_VER_INFO;
 #endif
 #else
 #ifdef USE_TOUCH
@@ -961,48 +958,31 @@ void network_send(int id, void* data, int len) {
 		network_stats[0].outgoing += len + 1;
 		network_send_tmp[0] = id;
 		memcpy(network_send_tmp + 1, data, len);
-		enet_peer_send(peer, 0, enet_packet_create(network_send_tmp, len + 1, ENET_PACKET_FLAG_RELIABLE));
+		net_transport_send(network_send_tmp, (size_t)(len + 1));
 	}
 }
 
 unsigned int network_ping() {
-	return network_connected ? peer->roundTripTime : 0;
+	return network_connected ? net_transport_rtt() : 0;
 }
 
 void network_disconnect() {
 	if(network_connected) {
-		enet_peer_disconnect(peer, 0);
 		network_connected = 0;
 		network_logged_in = 0;
-
-		ENetEvent event;
-		while(enet_host_service(client, &event, 3000) > 0) {
-			switch(event.type) {
-				case ENET_EVENT_TYPE_RECEIVE: enet_packet_destroy(event.packet); break;
-				case ENET_EVENT_TYPE_DISCONNECT:
-					enet_host_destroy(client);
-				return;
-			}
-		}
-
-		enet_peer_reset(peer);
-		enet_host_destroy(client);
+		net_transport_disconnect();
 	}
 }
 
 int network_connect_sub(char* ip, int port, int version) {
-	ENetAddress address;
-	ENetEvent event;
+	net_transport_event event;
 	network_init_host();
-	enet_address_set_host(&address, ip);
-	address.port = port;
-	peer = enet_host_connect(client, &address, 1, version);
 	network_logged_in = 0;
 	*network_custom_reason = 0;
 	memset(network_stats, 0, sizeof(struct network_stat) * 40);
-	if(peer == NULL)
+	if(!net_transport_connect(ip, port, (unsigned int)version))
 		return 0;
-	if(enet_host_service(client, &event, 2500) > 0 && event.type == ENET_EVENT_TYPE_CONNECT) {
+	if(net_transport_poll(&event, 2500) > 0 && event.type == NET_TRANSPORT_EVENT_CONNECT) {
 		network_received_packets = 0;
 		network_connected = 1;
 		gmi_mode = GMI_MODE_UNDETECTED;
@@ -1010,14 +990,14 @@ int network_connect_sub(char* ip, int port, int version) {
 		float start = window_time();
 		while(window_time() - start < 1.0F) { // listen connection for 1s, check if server disconnects
 			if(!network_update()) {
-				enet_peer_reset(peer);
+				net_transport_disconnect();
 				return 0;
 			}
 		}
 		return 1;
 	}
 	chat_showpopup("No response", 3.0F, rgb(255, 0, 0));
-	enet_peer_reset(peer);
+	net_transport_disconnect();
 	return 0;
 }
 
@@ -1077,34 +1057,34 @@ int network_update() {
 			network_stats_last = window_time();
 		}
 
-		ENetEvent event;
-		while(enet_host_service(client, &event, 0) > 0) {
+		net_transport_event event;
+		while(net_transport_poll(&event, 0) > 0) {
 			switch(event.type) {
-				case ENET_EVENT_TYPE_RECEIVE: {
-					network_stats[0].ingoing += event.packet->dataLength;
-					int id = event.packet->data[0];
+				case NET_TRANSPORT_EVENT_RECEIVE: {
+					network_stats[0].ingoing += event.length;
+					int id = event.data[0];
 					if(*packets[id]) {
 						log_debug("Packet id %i", id);
-						(*packets[id])(event.packet->data + 1, event.packet->dataLength - 1);
+						(*packets[id])(event.data + 1, (int)event.length - 1);
 					} else {
-						log_error("Invalid packet id %i, length: %i", id, (int)event.packet->dataLength - 1);
+						log_error("Invalid packet id %i, length: %i", id, (int)event.length - 1);
 					}
 					network_received_packets++;
-					enet_packet_destroy(event.packet);
+					net_transport_recv_done(&event);
 					break;
 				}
-				case ENET_EVENT_TYPE_DISCONNECT:
+				case NET_TRANSPORT_EVENT_DISCONNECT:
 					// In case we're disconnected for using the wrong protocol, don't return to HUD just yet
-					if(event.data != 3) {
+					if(event.event_data != 3) {
 						hud_change(&hud_serverlist);
-						chat_showpopup(network_reason_disconnect(event.data), 10.0F, rgb(255, 0, 0));
+						chat_showpopup(network_reason_disconnect(event.event_data), 10.0F, rgb(255, 0, 0));
 					}
 
-					log_error("server disconnected! reason: %s", network_reason_disconnect(event.data));
-					event.peer->data = NULL;
+					log_error("server disconnected! reason: %s", network_reason_disconnect(event.event_data));
 					network_connected = 0;
 					network_logged_in = 0;
 					return 0;
+				default: break;
 			}
 		}
 
@@ -1174,9 +1154,7 @@ int network_status() {
 }
 
 void network_init() {
-	enet_initialize();
-	client = enet_host_create(NULL, 1, 1, 0, 0); // limit bandwidth here if you want to
-	enet_host_compress_with_range_coder(client);
+	net_transport_open();
 
 	packets[PACKET_POSITIONDATA_ID] = read_PacketPositionData;
 	packets[PACKET_ORIENTATIONDATA_ID] = read_PacketOrientationData;
